@@ -1,0 +1,37 @@
+============================================================
+Athena Runtime Analysis Report
+============================================================
+
+Total Steps Analyzed: 467
+
+Average Step Time: 9.448 seconds
+
+Stage Breakdown:
+----------------------------------------
+  Weight Sync         :   2.401s  ( 25.4%)
+  Critic Update       :   2.084s  ( 22.1%)
+  Values (Critic)     :   1.239s  ( 13.1%)
+  Rollout (Gen)       :   1.184s  ( 12.5%)
+  Actor Update        :   1.028s  ( 10.9%)
+  Advantage           :   0.134s  (  1.4%)
+  Reference Model     :   0.000s  (  0.0%)
+
+Performance Bottlenecks:
+----------------------------------------
+  ⚠️  Top bottleneck: Weight Sync (25.4% of step time)
+
+GPU Status:
+----------------------------------------
+  Memory Peak:      23.46 GB  (max: 23.48 GB)
+  GPU Utilization:  47.7%  (max: 100.0%)
+  Power:            118.6 W  (max: 206.5 W)
+  Temperature:      78.4 °C  (max: 84.0 °C)
+
+Throughput:
+----------------------------------------
+  Mean:  277.1 tok/s
+  Max:   435.5 tok/s
+  Min:   22.3 tok/s
+  Std:   50.0 tok/s
+
+============================================================

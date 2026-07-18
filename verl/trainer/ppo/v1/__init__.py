@@ -17,6 +17,8 @@ from .trainer_base import PPOTrainer, get_trainer_cls, register_trainer
 from .trainer_colocate_async import PPOTrainerColocateAsync
 from .trainer_separate_async import PPOTrainerSeparateAsync
 from .trainer_sync import PPOTrainerSync
+from . import athena_trainer  # 新增这一行，确保装饰器执行
+from . import athena_separate
 
 __all__ = [
     "PPOTrainer",

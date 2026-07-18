@@ -205,6 +205,7 @@ class ReplayBuffer:
         last_debug_time = time.time()
         self._sync_metadata_from_transfer_queue()
         while not self._has_enough_samples(global_steps, partition_id, batch_size):
+
             time.sleep(self.poll_interval)
             self._sync_metadata_from_transfer_queue()
 

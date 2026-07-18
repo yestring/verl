@@ -154,6 +154,7 @@ class PPOTrainer(ABC):
         5. [Optional] MultiTeacherModelManager: LLM teacher servers for on-policy distillation.
         """
         self._setup()
+    
         self.on_init_end()
 
     def _setup(self):
@@ -312,7 +313,6 @@ class PPOTrainer(ABC):
             agent_loop_manager: The agent loop manager to generate sequences.
         """
         self.agent_loop_manager = agent_loop_manager
-
         # initialize SkipManager for V1 rollout skip support
         SkipManager.init(self.config)
 
@@ -330,18 +330,23 @@ class PPOTrainer(ABC):
         # perform validation before training
         if self.config.trainer.get("val_before_train", True):
             self.on_validate_begin()
+
             val_metrics = self._validate()
+
             self.on_validate_end()
+
             assert val_metrics, f"{val_metrics=}"
+
             pprint(f"Initial validation metrics: {val_metrics}")
             self.logger.log(data=val_metrics, step=self.global_steps)
             if self.config.trainer.get("val_only", False):
+
                 self._shutdown_dump_executor()
+
                 return
 
         current_epoch = self.global_steps // len(self.train_dataloader)
         progress_bar = tqdm(total=self.total_training_steps, initial=self.global_steps, desc="Training Progress")
-
         # we start from step 1
         self.global_steps += 1
         SkipManager.set_step(self.global_steps)
@@ -376,7 +381,7 @@ class PPOTrainer(ABC):
                         self._save_checkpoint()
 
                 self.on_step_end()
-
+                
             # 4. validate
             if self.config.trainer.test_freq > 0 and (
                 is_last_step or self.global_steps % self.config.trainer.test_freq == 0
@@ -424,15 +429,19 @@ class PPOTrainer(ABC):
         sample_batch_size = train_batch_size // self.parameter_sync_step
         # TODO: use background feeder to add samples
         # 1. add batch to generate
+
         self._add_batch_to_generate()
 
         metrics_aggregator = MetricsAggregator()
+
         combined_keys: list = []
         combined_tags: list = []
         combined_partition_id = "train"
         for _ in range(self.parameter_sync_step):
+
             iter_metrics: dict = {}
             batch = self._step_once(iter_metrics, timing_raw, sample_batch_size)
+
             sample_count = sum(not tag.get("is_padding", False) for tag in batch.tags)
             metrics_aggregator.add_step_metrics(iter_metrics, sample_count=sample_count)
             combined_keys.extend(batch.keys)
@@ -445,6 +454,7 @@ class PPOTrainer(ABC):
     def _step_once(self, metrics: dict, timing_raw: dict, sample_batch_size: int) -> KVBatchMeta:
         """Run a single local update: sample one mini-batch and perform the full PPO pipeline once."""
         # 1. sample batch from replay buffer
+
         with marked_timer("gen", timing_raw, color="red"):
             self.on_sample_begin()
             batch, off_policy_metrics = self.replay_buffer.sample(

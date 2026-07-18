@@ -132,7 +132,9 @@ class TaskRunnerV1:
 
         from verl.trainer.ppo.v1 import get_trainer_cls
 
+        
         trainer_cls = get_trainer_cls(config.trainer.v1.trainer_mode)
+        
 
         config.transfer_queue.enable = True
         pprint(OmegaConf.to_container(config, resolve=True))
@@ -146,6 +148,7 @@ class TaskRunnerV1:
             self.trainer.init()
             self.init_agent_loop_manager()
             self.trainer.fit(self.agent_loop_manager)
+
         finally:
             tq.close()
 
