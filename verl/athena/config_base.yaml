@@ -1,0 +1,39 @@
+algorithm:
+  adv_estimator: grpo
+  use_kl_in_reward: false
+
+data:
+  train_files: ["/home/hx/data/gsm8k/train.parquet"]
+  val_files: ["/home/hx/data/gsm8k/test.parquet"]
+  train_batch_size: 8
+  max_prompt_length: 128
+  max_response_length: 64
+
+actor_rollout_ref:
+  model:
+    path: /home/hx/Qwen2.5-1.5B-Instruct
+  actor:
+    use_dynamic_bsz: true
+    ppo_max_token_len_per_gpu: 1024  # 保持你原来的值
+  rollout:
+    n: 2
+    gpu_memory_utilization: 0.20
+
+trainer:
+  n_gpus_per_node: 1
+  nnodes: 1
+  total_epochs: 1
+  logger: ["console"]
+  v1:
+    trainer_mode: athena_trainer
+  athena_log_dir: ./athena_logs
+  athena:
+    enabled: true
+    window_size: 5
+    cooldown_steps: 5
+    num_step_demo: 20
+    low_memory_threshold: 0.70
+    high_memory_threshold: 0.90
+    low_gpu_utilization_threshold: 0.55
+    min_token_budget: 1024
+    max_token_budget: 32768

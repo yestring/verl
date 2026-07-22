@@ -13,7 +13,7 @@ python3 -m verl.trainer.main_ppo \
     \
     data.train_files="['$HOME/data/gsm8k/train.parquet']" \
     data.val_files="['$HOME/data/gsm8k/test.parquet']" \
-    data.train_batch_size=1 \
+    data.train_batch_size=16 \
     data.max_prompt_length=128 \
     data.max_response_length=64 \
     data.filter_overlong_prompts=True \
@@ -24,8 +24,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     \
     actor_rollout_ref.actor.optim.lr=1e-6 \
-    actor_rollout_ref.actor.ppo_mini_batch_size=1 \
-    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=16 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=4 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=1024 \
     actor_rollout_ref.actor.use_kl_loss=True \
