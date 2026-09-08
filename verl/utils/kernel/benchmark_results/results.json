@@ -1,0 +1,152 @@
+[
+  {
+    "workload": {
+      "M": 1024,
+      "K": 2048,
+      "V": 32000,
+      "name": "small (1k\u00d72k\u00d732k)"
+    },
+    "strategy": "Separate",
+    "forward_time_ms": 18.70909423828125,
+    "backward_time_ms": 38.44249572753906,
+    "end2end_time_ms": 57.15158996582031,
+    "peak_memory_mb": 908.16015625,
+    "forward_correct": false,
+    "backward_correct": false
+  },
+  {
+    "workload": {
+      "M": 1024,
+      "K": 2048,
+      "V": 32000,
+      "name": "small (1k\u00d72k\u00d732k)"
+    },
+    "strategy": "Split_N",
+    "forward_time_ms": 14.286029052734374,
+    "backward_time_ms": 48.101376342773435,
+    "end2end_time_ms": 62.38740539550781,
+    "peak_memory_mb": 841.03515625,
+    "forward_correct": false,
+    "backward_correct": false
+  },
+  {
+    "workload": {
+      "M": 1024,
+      "K": 2048,
+      "V": 32000,
+      "name": "small (1k\u00d72k\u00d732k)"
+    },
+    "strategy": "Fused_Split_N",
+    "forward_time_ms": 19.332403564453124,
+    "backward_time_ms": 32.48875427246094,
+    "end2end_time_ms": 51.82115783691406,
+    "peak_memory_mb": 790.28515625,
+    "forward_correct": false,
+    "backward_correct": false
+  },
+  {
+    "workload": {
+      "M": 1024,
+      "K": 2048,
+      "V": 32000,
+      "name": "small (1k\u00d72k\u00d732k)"
+    },
+    "strategy": "Fused_Split_N_Grouped",
+    "forward_time_ms": 17.49022674560547,
+    "backward_time_ms": 35.520101928710936,
+    "end2end_time_ms": 53.010328674316405,
+    "peak_memory_mb": 790.28515625,
+    "forward_correct": false,
+    "backward_correct": false
+  },
+  {
+    "workload": {
+      "M": 1024,
+      "K": 2048,
+      "V": 32000,
+      "name": "small (1k\u00d72k\u00d732k)"
+    },
+    "strategy": "Owner_Compute",
+    "forward_time_ms": 15.928524780273438,
+    "backward_time_ms": 33.811456298828126,
+    "end2end_time_ms": 49.73998107910157,
+    "peak_memory_mb": 790.28515625,
+    "forward_correct": false,
+    "backward_correct": false
+  },
+  {
+    "workload": {
+      "M": 4096,
+      "K": 4096,
+      "V": 128256,
+      "name": "medium (4k\u00d74k\u00d7128k)"
+    },
+    "strategy": "Separate",
+    "forward_time_ms": 405.80146484375,
+    "backward_time_ms": 1277.90498046875,
+    "end2end_time_ms": 1683.7064453125,
+    "peak_memory_mb": 8224.390625,
+    "forward_correct": false,
+    "backward_correct": false
+  },
+  {
+    "workload": {
+      "M": 4096,
+      "K": 4096,
+      "V": 128256,
+      "name": "medium (4k\u00d74k\u00d7128k)"
+    },
+    "strategy": "Split_N",
+    "forward_time_ms": 452.16162109375,
+    "backward_time_ms": 1388.66689453125,
+    "end2end_time_ms": 1840.828515625,
+    "peak_memory_mb": 6442.890625,
+    "forward_correct": false,
+    "backward_correct": false
+  },
+  {
+    "workload": {
+      "M": 4096,
+      "K": 4096,
+      "V": 128256,
+      "name": "medium (4k\u00d74k\u00d7128k)"
+    },
+    "strategy": "Fused_Split_N",
+    "forward_time_ms": 434.87734375,
+    "backward_time_ms": 1144.87470703125,
+    "end2end_time_ms": 1579.75205078125,
+    "peak_memory_mb": 6220.390625,
+    "forward_correct": false,
+    "backward_correct": false
+  },
+  {
+    "workload": {
+      "M": 4096,
+      "K": 4096,
+      "V": 128256,
+      "name": "medium (4k\u00d74k\u00d7128k)"
+    },
+    "strategy": "Fused_Split_N_Grouped",
+    "forward_time_ms": 441.827734375,
+    "backward_time_ms": 1137.5732421875,
+    "end2end_time_ms": 1579.4009765625,
+    "peak_memory_mb": 6220.390625,
+    "forward_correct": false,
+    "backward_correct": false
+  },
+  {
+    "workload": {
+      "M": 4096,
+      "K": 4096,
+      "V": 128256,
+      "name": "medium (4k\u00d74k\u00d7128k)"
+    },
+    "strategy": "Owner_Compute",
+    "forward_time_ms": 460.617236328125,
+    "backward_time_ms": 1129.8052734375,
+    "end2end_time_ms": 1590.4225097656251,
+    "peak_memory_mb": 6220.390625,
+    "forward_correct": false,
+    "backward_correct": false
+  }
+]

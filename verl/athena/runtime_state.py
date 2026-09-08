@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Any
 
 
 @dataclass
@@ -23,7 +23,7 @@ class GPUStats:
     pcie_tx_gb: float = 0.0
     pcie_rx_gb: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         result = {}
         for k, v in self.__dict__.items():
             if hasattr(v, 'to_dict'):
@@ -49,7 +49,7 @@ class VLLMStats:
     decode_tokens: int = 0                # Decode 阶段处理的 token 数
     scheduler_queue: int = 0              # 调度器队列长度
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {k: v for k, v in self.__dict__.items()}
 
 
@@ -63,7 +63,7 @@ class TransferQueueStats:
     queue_length: int = 0                 # 队列当前长度
     latency_ms: float = 0.0               # 任务平均处理延迟 (ms)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {k: v for k, v in self.__dict__.items()}
 
 
@@ -77,7 +77,7 @@ class RolloutStats:
     num_preempted: int = 0                # 被抢占的请求数
     num_aborted: int = 0                  # 被中止的请求数
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {k: v for k, v in self.__dict__.items()}
 
 
@@ -98,7 +98,7 @@ class TrainingStats:
     returns: float = 0.0                  # 平均回报 (return)
     mfu: float = 0.0                      # Model FLOPs Utilization (模型算力利用率)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {k: v for k, v in self.__dict__.items()}
 
 
@@ -139,9 +139,9 @@ class RuntimeState:
     training: TrainingStats = field(default_factory=TrainingStats)
 
     # ---- 额外扩展字段 (用于临时或未分类的数据) ----
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """递归转换为字典，便于 JSON 序列化"""
         result = {}
         for k, v in self.__dict__.items():

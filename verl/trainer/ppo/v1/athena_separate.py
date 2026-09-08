@@ -220,6 +220,8 @@ class AthenaTrainerSeparate(PPOTrainerSeparateAsync):
 
         # VeRL metrics（整个 Step 峰值）
         gpu.memory_peak_gb = metrics.get("actor/perf/max_memory_allocated_gb", 0.0)
+        gpu.memory_allocated_gb = gpu.memory_peak_gb
+        gpu.memory_reserved_gb = metrics.get("actor/perf/max_memory_reserved_gb", 0.0)
 
         # NVML 采集
         try:
@@ -232,8 +234,8 @@ class AthenaTrainerSeparate(PPOTrainerSeparateAsync):
             # Memory
             mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
             gpu.memory_used_gb = mem.used / 1024**3
-            gpu.memory_reserved_gb = mem.used / 1024**3
-            gpu.memory_allocated_gb = mem.used / 1024**3
+            if "actor/perf/max_memory_reserved_gb" not in metrics:
+                gpu.memory_reserved_gb = torch.cuda.memory_reserved() / 1024**3
             gpu.memory_utilization = mem.used / mem.total
 
             # GPU Utilization

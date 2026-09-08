@@ -34,6 +34,34 @@ entropy_from_logits_with_chunking: False
 # Chunk size used by chunked entropy computation
 entropy_from_logits_chunk_size: 2048
 
+# Entropy kernel backward strategy (one of SUPPORTED_BACKWARD_METHODS in verl.utils.kernel.kernels)
+entropy_kernel_backward_method: split_dlogits_n
+
+# Whether to use the fused forward entropy kernel (single-pass mainloop + epilogue)
+entropy_kernel_forward_fused: False
+
+# Override vocab_per_split for all entropy kernel families; null keeps per-strategy defaults
+entropy_kernel_vocab_per_split: null
+
+# Override n_group for grouped / owner-compute entropy strategies; null keeps defaults
+entropy_kernel_n_group: null
+
+# Override BLOCK_SIZE_M for the entropy kernels; null keeps per-family defaults
+entropy_kernel_block_size_m: null
+
+# Override BLOCK_SIZE_N for the entropy kernels; null keeps per-family defaults
+entropy_kernel_block_size_n: null
+
+# Override BLOCK_SIZE_K for the entropy kernels; null keeps per-family defaults
+entropy_kernel_block_size_k: null
+
 megatron:
   entropy_from_logits_with_chunking: ${oc.select:actor_rollout_ref.actor.entropy_from_logits_with_chunking,False}
   entropy_from_logits_chunk_size: ${oc.select:actor_rollout_ref.actor.entropy_from_logits_chunk_size,2048}
+  entropy_kernel_backward_method: ${oc.select:actor_rollout_ref.actor.entropy_kernel_backward_method,split_dlogits_n}
+  entropy_kernel_forward_fused: ${oc.select:actor_rollout_ref.actor.entropy_kernel_forward_fused,False}
+  entropy_kernel_vocab_per_split: ${oc.select:actor_rollout_ref.actor.entropy_kernel_vocab_per_split,null}
+  entropy_kernel_n_group: ${oc.select:actor_rollout_ref.actor.entropy_kernel_n_group,null}
+  entropy_kernel_block_size_m: ${oc.select:actor_rollout_ref.actor.entropy_kernel_block_size_m,null}
+  entropy_kernel_block_size_n: ${oc.select:actor_rollout_ref.actor.entropy_kernel_block_size_n,null}
+  entropy_kernel_block_size_k: ${oc.select:actor_rollout_ref.actor.entropy_kernel_block_size_k,null}

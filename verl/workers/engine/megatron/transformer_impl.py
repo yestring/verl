@@ -135,6 +135,37 @@ class MegatronEngine(BaseEngine):
 
             apply_patch_megatron_recomputation_backward()
 
+        # Athena entropy-kernel knobs are read from the module-level config in
+        # verl.utils.kernel.kernels; apply them before the module is built.
+        self._apply_entropy_kernel_config()
+
+    def _apply_entropy_kernel_config(self, warmup: bool = False):
+        """Apply Athena entropy-kernel decision knobs to the global kernel config.
+
+        Mirrors ``FSDPEngine._apply_entropy_kernel_config``: the triton entropy
+        kernels in ``verl.utils.kernel.kernels`` read their strategy / tile-size
+        settings from a module-level ``_config``. Defaults are a no-op, so this
+        is safe for every engine construction (ref / critic workers included).
+        ``warmup`` is only set after the fused forward path has actually been
+        patched in.
+        """
+        from verl.utils.kernel import kernels
+
+        ec = self.engine_config
+        kernels.set_forward_fused(ec.entropy_kernel_forward_fused)
+        kernels.set_backward_method(ec.entropy_kernel_backward_method)
+        kernels.configure(
+            vocab_per_split=ec.entropy_kernel_vocab_per_split,
+            n_group=ec.entropy_kernel_n_group,
+            block_size_m=ec.entropy_kernel_block_size_m,
+            block_size_n=ec.entropy_kernel_block_size_n,
+            block_size_k=ec.entropy_kernel_block_size_k,
+        )
+        if ec.use_fused_kernels and warmup:
+            # JIT-compile the selected kernels here instead of inside the first
+            # training step (warmup is a no-op without triton/CUDA).
+            kernels.warmup_entropy_kernels()
+
     def _init_device_mesh(self):
         # TODO: set different parallelism for actor, critic, ref
         if mpu.is_initialized():
@@ -366,6 +397,10 @@ class MegatronEngine(BaseEngine):
 
         for model in self.module:
             patch_fused_forward(model)
+
+        # fused path is active now: re-apply kernel knobs and JIT-compile the
+        # selected entropy kernels outside of the first training step.
+        self._apply_entropy_kernel_config(warmup=True)
 
     def _build_optimizer(self):
         from verl.utils.megatron.optimizer import get_megatron_optimizer, init_megatron_optim_config

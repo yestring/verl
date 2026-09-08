@@ -2,28 +2,76 @@ algorithm:
   adv_estimator: grpo
   use_kl_in_reward: false
 
+model_engine: dp  # 使用 FSDP 后端，若想用 Megatron 改为 megatron
+
 data:
   train_files: ["/home/hx/data/gsm8k/train.parquet"]
   val_files: ["/home/hx/data/gsm8k/test.parquet"]
-  train_batch_size: 8
-  max_prompt_length: 128
-  max_response_length: 64
+  train_batch_size: 16          
+  max_prompt_length: 2048        # 缩短序列长度，节省显存
+  max_response_length: 32
+  filter_overlong_prompts: true
+  truncation: error
+  dataloader_num_workers: 2
+  val_batch_size: 1 
 
 actor_rollout_ref:
   model:
     path: /home/hx/Qwen2.5-1.5B-Instruct
+    # OPT is a base model and its tokenizer does not provide a chat template.
+    use_remove_padding: true
+    enable_gradient_checkpointing: false
   actor:
     use_dynamic_bsz: true
-    ppo_max_token_len_per_gpu: 1024  # 保持你原来的值
+    ppo_max_token_len_per_gpu: 4096        # 进一步降低 token budget
+    ppo_mini_batch_size: 1
+    ppo_micro_batch_size_per_gpu: 1
+    use_kl_loss: false
+    kl_loss_coef: 0.001
+    entropy_coeff: 0
+    optim:
+      lr: 1e-6
+    fsdp_config:
+      param_offload: false
+      optimizer_offload: false
+      # On one GPU FSDP falls back to NO_SHARD. This remains useful when the
+      # same config is later run with multiple GPUs.
+      reshard_after_forward: true
   rollout:
-    n: 2
-    gpu_memory_utilization: 0.20
+    name: vllm
+    n: 8                                  # 减少采样数，省显存
+    tensor_model_parallel_size: 1
+    gpu_memory_utilization: 0.4
+    enforce_eager: false
+    max_num_batched_tokens: 4096
+    max_num_seqs: 32
+    log_prob_use_dynamic_bsz: true
+    log_prob_max_token_len_per_gpu: 2048
+    log_prob_micro_batch_size_per_gpu: 1
+  ref:
+    log_prob_use_dynamic_bsz: true
+    log_prob_max_token_len_per_gpu: 2048
+    fsdp_config:
+      param_offload: false                 # Ref 模型卸载到 CPU，省显存
+
+critic:
+  enable: false                            # 禁用 Critic（GRPO 不需要）
+
+reward:
+  reward_model:
+    enable: false                          # 禁用 Reward Model
 
 trainer:
-  n_gpus_per_node: 1
+  n_gpus_per_node: 2
   nnodes: 1
   total_epochs: 1
+  total_training_steps: 10                 # 短测试
+  save_freq: -1
+  test_freq: -1
   logger: ["console"]
+  project_name: athena_test
+  experiment_name: qwen1.5b_debug
+  default_local_dir: ./checkpoints         # checkpoint 保存目录
   v1:
     trainer_mode: athena_trainer
   athena_log_dir: ./athena_logs
@@ -34,6 +82,6 @@ trainer:
     num_step_demo: 20
     low_memory_threshold: 0.70
     high_memory_threshold: 0.90
-    low_gpu_utilization_threshold: 0.55
-    min_token_budget: 1024
-    max_token_budget: 32768
+    low_gpu_utilization_threshold: 0.7
+    min_token_budget: 512
+    max_token_budget: 4096

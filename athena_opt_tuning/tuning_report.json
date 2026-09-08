@@ -1,0 +1,762 @@
+{
+  "base_config": "/home/hx/verl/verl/athena/config_opt125m.yaml",
+  "resume_from": null,
+  "warmup_steps": 3,
+  "probe_steps": 5,
+  "memory_limit_gb": 7.0,
+  "utility": {
+    "requested_weights": {
+      "throughput": 0.6,
+      "step_time": 0.2,
+      "peak_memory_gb": 0.1,
+      "throughput_cv": 0.1
+    },
+    "effective_weights": {
+      "throughput": 0.6,
+      "step_time": 0.2,
+      "peak_memory_gb": 0.1,
+      "throughput_cv": 0.1
+    },
+    "inactive_metrics": {},
+    "constraints": {
+      "peak_memory_gb": {
+        "max": 7.0
+      },
+      "gpu_count": {
+        "eq": 2.0
+      }
+    }
+  },
+  "best_trial": 6,
+  "best_config": {
+    "actor_rollout_ref.actor.use_dynamic_bsz": true,
+    "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 128,
+    "actor_rollout_ref.actor.fsdp_config.param_offload": false,
+    "actor_rollout_ref.actor.fsdp_config.optimizer_offload": false
+  },
+  "results": [
+    {
+      "trial": 0,
+      "config": {
+        "actor_rollout_ref.actor.use_dynamic_bsz": true,
+        "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 2048,
+        "actor_rollout_ref.model.enable_gradient_checkpointing": true
+      },
+      "status": "success",
+      "throughput": 18.515509366212783,
+      "throughput_p10": 10.817046055626236,
+      "throughput_cv": 0.26560355492125426,
+      "step_time": 3.2684398870915174,
+      "step_time_p95": 5.345413044188172,
+      "gen_time": 0.07438546791672707,
+      "actor_time": 0.8505736188963056,
+      "peak_memory_gb": 2.5475854873657227,
+      "peak_reserved_memory_gb": 2.64453125,
+      "device_memory_used_gb": 36.5572509765625,
+      "device_memory_utilization": 0.9139312744140625,
+      "gpu_utilization": null,
+      "power_watts": 58.56699999999999,
+      "throughput_per_gb": 7.267865772527365,
+      "energy_per_1k_tokens": 3632.692932591577,
+      "mfu": null,
+      "grad_norm": null,
+      "ttft_ms": null,
+      "tpot_ms": null,
+      "kv_usage": null,
+      "transfer_queue_latency_ms": null,
+      "samples": 5,
+      "duration_s": 165.37228135718033,
+      "gpu_count": 2,
+      "utility": 0.2740250376991149,
+      "utility_components": {
+        "throughput": {
+          "raw": 18.515509366212783,
+          "normalized": 0.2314766169230142,
+          "effective_weight": 0.6,
+          "contribution": 0.13888597015380852
+        },
+        "step_time": {
+          "raw": 3.2684398870915174,
+          "normalized": 0.12492059781448672,
+          "effective_weight": 0.2,
+          "contribution": 0.024984119562897346
+        },
+        "peak_memory_gb": {
+          "raw": 2.5475854873657227,
+          "normalized": 0.9986176322091695,
+          "effective_weight": 0.1,
+          "contribution": 0.09986176322091696
+        },
+        "throughput_cv": {
+          "raw": 0.26560355492125426,
+          "normalized": 0.10293184761492091,
+          "effective_weight": 0.1,
+          "contribution": 0.010293184761492092
+        }
+      },
+      "constraint_violations": [],
+      "metric_reliability": {
+        "throughput": "reliable",
+        "step_time": "reliable",
+        "peak_memory_gb": "reliable",
+        "gpu.memory_reserved_gb": "reliable",
+        "gpu.memory_used_gb": "partial",
+        "gpu.memory_utilization": "partial",
+        "gpu.utilization": "all_zero",
+        "gpu.power_watts": "partial",
+        "training.mfu": "all_zero",
+        "training.grad_norm": "all_zero",
+        "rollout.ttft_ms": "unavailable",
+        "rollout.tpot_ms": "unavailable",
+        "vllm.kv_usage": "unavailable",
+        "transfer_queue.latency_ms": "unavailable",
+        "throughput_per_gb": "derived",
+        "energy_per_1k_tokens": "derived_from_partial"
+      },
+      "error": null
+    },
+    {
+      "trial": 1,
+      "config": {
+        "actor_rollout_ref.actor.use_dynamic_bsz": true,
+        "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 2048,
+        "actor_rollout_ref.model.enable_gradient_checkpointing": false
+      },
+      "status": "success",
+      "throughput": 18.828991704040074,
+      "throughput_p10": 10.905355785774994,
+      "throughput_cv": 0.25544103984304417,
+      "step_time": 3.3986137877218425,
+      "step_time_p95": 5.316763203684241,
+      "gen_time": 0.07486147759482265,
+      "actor_time": 0.8241187878884375,
+      "peak_memory_gb": 2.5466089248657227,
+      "peak_reserved_memory_gb": 2.642578125,
+      "device_memory_used_gb": 36.5552978515625,
+      "device_memory_utilization": 0.9138824462890625,
+      "gpu_utilization": null,
+      "power_watts": 56.8186,
+      "throughput_per_gb": 7.393750771934049,
+      "energy_per_1k_tokens": 3542.5349583042694,
+      "mfu": null,
+      "grad_norm": null,
+      "ttft_ms": null,
+      "tpot_ms": null,
+      "kv_usage": null,
+      "transfer_queue_latency_ms": null,
+      "samples": 5,
+      "duration_s": 166.60892720287666,
+      "gpu_count": 2,
+      "utility": 0.28020964081581645,
+      "utility_components": {
+        "throughput": {
+          "raw": 18.828991704040074,
+          "normalized": 0.26015022580646746,
+          "effective_weight": 0.6,
+          "contribution": 0.15609013548388048
+        },
+        "step_time": {
+          "raw": 3.3986137877218425,
+          "normalized": 0.03333213870881113,
+          "effective_weight": 0.2,
+          "contribution": 0.006666427741762227
+        },
+        "peak_memory_gb": {
+          "raw": 2.5466089248657227,
+          "normalized": 1.0,
+          "effective_weight": 0.1,
+          "contribution": 0.1
+        },
+        "throughput_cv": {
+          "raw": 0.25544103984304417,
+          "normalized": 0.17453077590173716,
+          "effective_weight": 0.1,
+          "contribution": 0.017453077590173716
+        }
+      },
+      "constraint_violations": [],
+      "metric_reliability": {
+        "throughput": "reliable",
+        "step_time": "reliable",
+        "peak_memory_gb": "reliable",
+        "gpu.memory_reserved_gb": "reliable",
+        "gpu.memory_used_gb": "partial",
+        "gpu.memory_utilization": "partial",
+        "gpu.utilization": "all_zero",
+        "gpu.power_watts": "partial",
+        "training.mfu": "all_zero",
+        "training.grad_norm": "all_zero",
+        "rollout.ttft_ms": "unavailable",
+        "rollout.tpot_ms": "unavailable",
+        "vllm.kv_usage": "unavailable",
+        "transfer_queue.latency_ms": "unavailable",
+        "throughput_per_gb": "derived",
+        "energy_per_1k_tokens": "derived_from_partial"
+      },
+      "error": null
+    },
+    {
+      "trial": 2,
+      "config": {
+        "actor_rollout_ref.actor.use_dynamic_bsz": true,
+        "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 4096,
+        "actor_rollout_ref.model.enable_gradient_checkpointing": true
+      },
+      "status": "success",
+      "throughput": 18.55478860825002,
+      "throughput_p10": 14.389349736553816,
+      "throughput_cv": 0.13827666829138718,
+      "step_time": 3.2606138112023473,
+      "step_time_p95": 4.863519206829369,
+      "gen_time": 0.07570798601955175,
+      "actor_time": 0.8729057041928172,
+      "peak_memory_gb": 2.5475854873657227,
+      "peak_reserved_memory_gb": 2.64453125,
+      "device_memory_used_gb": 36.5572509765625,
+      "device_memory_utilization": 0.9139312744140625,
+      "gpu_utilization": null,
+      "power_watts": 58.374199999999995,
+      "throughput_per_gb": 7.283283995873368,
+      "energy_per_1k_tokens": 3379.744695385955,
+      "mfu": null,
+      "grad_norm": null,
+      "ttft_ms": null,
+      "tpot_ms": null,
+      "kv_usage": null,
+      "transfer_queue_latency_ms": null,
+      "samples": 5,
+      "duration_s": 163.88413159316406,
+      "gpu_count": 2,
+      "utility": 0.36698879223069414,
+      "utility_components": {
+        "throughput": {
+          "raw": 18.55478860825002,
+          "normalized": 0.23506941143647983,
+          "effective_weight": 0.6,
+          "contribution": 0.1410416468618879
+        },
+        "step_time": {
+          "raw": 3.2606138112023473,
+          "normalized": 0.13042691073944646,
+          "effective_weight": 0.2,
+          "contribution": 0.026085382147889292
+        },
+        "peak_memory_gb": {
+          "raw": 2.5475854873657227,
+          "normalized": 0.9986176322091695,
+          "effective_weight": 0.1,
+          "contribution": 0.09986176322091696
+        },
+        "throughput_cv": {
+          "raw": 0.13827666829138718,
+          "normalized": 1.0,
+          "effective_weight": 0.1,
+          "contribution": 0.1
+        }
+      },
+      "constraint_violations": [],
+      "metric_reliability": {
+        "throughput": "reliable",
+        "step_time": "reliable",
+        "peak_memory_gb": "reliable",
+        "gpu.memory_reserved_gb": "reliable",
+        "gpu.memory_used_gb": "partial",
+        "gpu.memory_utilization": "partial",
+        "gpu.utilization": "all_zero",
+        "gpu.power_watts": "partial",
+        "training.mfu": "all_zero",
+        "training.grad_norm": "all_zero",
+        "rollout.ttft_ms": "unavailable",
+        "rollout.tpot_ms": "unavailable",
+        "vllm.kv_usage": "unavailable",
+        "transfer_queue.latency_ms": "unavailable",
+        "throughput_per_gb": "derived",
+        "energy_per_1k_tokens": "derived_from_partial"
+      },
+      "error": null
+    },
+    {
+      "trial": 3,
+      "config": {
+        "actor_rollout_ref.actor.use_dynamic_bsz": true,
+        "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 4096,
+        "actor_rollout_ref.model.enable_gradient_checkpointing": false
+      },
+      "status": "success",
+      "throughput": 17.464201308723844,
+      "throughput_p10": 13.256699266973703,
+      "throughput_cv": 0.1695894055153651,
+      "step_time": 3.4459884739480913,
+      "step_time_p95": 5.023441918939351,
+      "gen_time": 0.07294948911294341,
+      "actor_time": 0.8807874680496752,
+      "peak_memory_gb": 2.5466089248657227,
+      "peak_reserved_memory_gb": 2.642578125,
+      "device_memory_used_gb": 36.5552978515625,
+      "device_memory_utilization": 0.9138824462890625,
+      "gpu_utilization": null,
+      "power_watts": 58.0804,
+      "throughput_per_gb": 6.857826161763214,
+      "energy_per_1k_tokens": 3509.4103986712953,
+      "mfu": null,
+      "grad_norm": null,
+      "ttft_ms": null,
+      "tpot_ms": null,
+      "kv_usage": null,
+      "transfer_queue_latency_ms": null,
+      "samples": 5,
+      "duration_s": 165.55829217191786,
+      "gpu_count": 2,
+      "utility": 0.25912827122015153,
+      "utility_components": {
+        "throughput": {
+          "raw": 17.464201308723844,
+          "normalized": 0.13531555003359774,
+          "effective_weight": 0.6,
+          "contribution": 0.08118933002015864
+        },
+        "step_time": {
+          "raw": 3.4459884739480913,
+          "normalized": 0.0,
+          "effective_weight": 0.2,
+          "contribution": 0.0
+        },
+        "peak_memory_gb": {
+          "raw": 2.5466089248657227,
+          "normalized": 1.0,
+          "effective_weight": 0.1,
+          "contribution": 0.1
+        },
+        "throughput_cv": {
+          "raw": 0.1695894055153651,
+          "normalized": 0.7793894119999288,
+          "effective_weight": 0.1,
+          "contribution": 0.0779389411999929
+        }
+      },
+      "constraint_violations": [],
+      "metric_reliability": {
+        "throughput": "reliable",
+        "step_time": "reliable",
+        "peak_memory_gb": "reliable",
+        "gpu.memory_reserved_gb": "reliable",
+        "gpu.memory_used_gb": "partial",
+        "gpu.memory_utilization": "partial",
+        "gpu.utilization": "all_zero",
+        "gpu.power_watts": "partial",
+        "training.mfu": "all_zero",
+        "training.grad_norm": "all_zero",
+        "rollout.ttft_ms": "unavailable",
+        "rollout.tpot_ms": "unavailable",
+        "vllm.kv_usage": "unavailable",
+        "transfer_queue.latency_ms": "unavailable",
+        "throughput_per_gb": "derived",
+        "energy_per_1k_tokens": "derived_from_partial"
+      },
+      "error": null
+    },
+    {
+      "trial": 4,
+      "config": {
+        "actor_rollout_ref.actor.use_dynamic_bsz": true,
+        "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 8192,
+        "actor_rollout_ref.model.enable_gradient_checkpointing": true
+      },
+      "status": "success",
+      "throughput": 19.126173905538256,
+      "throughput_p10": 13.48779577073471,
+      "throughput_cv": 0.18087234991425394,
+      "step_time": 3.3107321616262197,
+      "step_time_p95": 4.879132873378694,
+      "gen_time": 0.07385646179318428,
+      "actor_time": 0.8782597063109279,
+      "peak_memory_gb": 2.5475854873657227,
+      "peak_reserved_memory_gb": 2.64453125,
+      "device_memory_used_gb": 36.5572509765625,
+      "device_memory_utilization": 0.9139312744140625,
+      "gpu_utilization": null,
+      "power_watts": 57.978199999999994,
+      "throughput_per_gb": 7.5075690297306865,
+      "energy_per_1k_tokens": 3358.255619494656,
+      "mfu": null,
+      "grad_norm": null,
+      "ttft_ms": null,
+      "tpot_ms": null,
+      "kv_usage": null,
+      "transfer_queue_latency_ms": null,
+      "samples": 5,
+      "duration_s": 163.94743478205055,
+      "gpu_count": 2,
+      "utility": 0.3612840350005516,
+      "utility_components": {
+        "throughput": {
+          "raw": 19.126173905538256,
+          "normalized": 0.2873328934870215,
+          "effective_weight": 0.6,
+          "contribution": 0.1723997360922129
+        },
+        "step_time": {
+          "raw": 3.3107321616262197,
+          "normalized": 0.09516436989205768,
+          "effective_weight": 0.2,
+          "contribution": 0.019032873978411538
+        },
+        "peak_memory_gb": {
+          "raw": 2.5475854873657227,
+          "normalized": 0.9986176322091695,
+          "effective_weight": 0.1,
+          "contribution": 0.09986176322091696
+        },
+        "throughput_cv": {
+          "raw": 0.18087234991425394,
+          "normalized": 0.6998966170901022,
+          "effective_weight": 0.1,
+          "contribution": 0.06998966170901022
+        }
+      },
+      "constraint_violations": [],
+      "metric_reliability": {
+        "throughput": "reliable",
+        "step_time": "reliable",
+        "peak_memory_gb": "reliable",
+        "gpu.memory_reserved_gb": "reliable",
+        "gpu.memory_used_gb": "partial",
+        "gpu.memory_utilization": "partial",
+        "gpu.utilization": "all_zero",
+        "gpu.power_watts": "partial",
+        "training.mfu": "all_zero",
+        "training.grad_norm": "all_zero",
+        "rollout.ttft_ms": "unavailable",
+        "rollout.tpot_ms": "unavailable",
+        "vllm.kv_usage": "unavailable",
+        "transfer_queue.latency_ms": "unavailable",
+        "throughput_per_gb": "derived",
+        "energy_per_1k_tokens": "derived_from_partial"
+      },
+      "error": null
+    },
+    {
+      "trial": 5,
+      "config": {
+        "actor_rollout_ref.actor.use_dynamic_bsz": true,
+        "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 8192,
+        "actor_rollout_ref.model.enable_gradient_checkpointing": false
+      },
+      "status": "success",
+      "throughput": 18.82094713478979,
+      "throughput_p10": 13.811820817441983,
+      "throughput_cv": 0.17739680379512837,
+      "step_time": 3.2942019100300968,
+      "step_time_p95": 4.821898408047854,
+      "gen_time": 0.07158262562006712,
+      "actor_time": 0.8294330728240311,
+      "peak_memory_gb": 2.5466089248657227,
+      "peak_reserved_memory_gb": 2.642578125,
+      "device_memory_used_gb": 36.5552978515625,
+      "device_memory_utilization": 0.9138824462890625,
+      "gpu_utilization": null,
+      "power_watts": 57.534000000000006,
+      "throughput_per_gb": 7.390591838038963,
+      "energy_per_1k_tokens": 3295.42036085469,
+      "mfu": null,
+      "grad_norm": null,
+      "ttft_ms": null,
+      "tpot_ms": null,
+      "kv_usage": null,
+      "transfer_queue_latency_ms": null,
+      "samples": 5,
+      "duration_s": 158.35981416283175,
+      "gpu_count": 2,
+      "utility": 0.3494459268596573,
+      "utility_components": {
+        "throughput": {
+          "raw": 18.82094713478979,
+          "normalized": 0.25941440498186463,
+          "effective_weight": 0.6,
+          "contribution": 0.15564864298911876
+        },
+        "step_time": {
+          "raw": 3.2942019100300968,
+          "normalized": 0.10679481397483526,
+          "effective_weight": 0.2,
+          "contribution": 0.021358962794967053
+        },
+        "peak_memory_gb": {
+          "raw": 2.5466089248657227,
+          "normalized": 1.0,
+          "effective_weight": 0.1,
+          "contribution": 0.1
+        },
+        "throughput_cv": {
+          "raw": 0.17739680379512837,
+          "normalized": 0.724383210755715,
+          "effective_weight": 0.1,
+          "contribution": 0.07243832107557151
+        }
+      },
+      "constraint_violations": [],
+      "metric_reliability": {
+        "throughput": "reliable",
+        "step_time": "reliable",
+        "peak_memory_gb": "reliable",
+        "gpu.memory_reserved_gb": "reliable",
+        "gpu.memory_used_gb": "partial",
+        "gpu.memory_utilization": "partial",
+        "gpu.utilization": "all_zero",
+        "gpu.power_watts": "partial",
+        "training.mfu": "all_zero",
+        "training.grad_norm": "all_zero",
+        "rollout.ttft_ms": "unavailable",
+        "rollout.tpot_ms": "unavailable",
+        "vllm.kv_usage": "unavailable",
+        "transfer_queue.latency_ms": "unavailable",
+        "throughput_per_gb": "derived",
+        "energy_per_1k_tokens": "derived_from_partial"
+      },
+      "error": null
+    },
+    {
+      "trial": 6,
+      "config": {
+        "actor_rollout_ref.actor.use_dynamic_bsz": true,
+        "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 128,
+        "actor_rollout_ref.actor.fsdp_config.param_offload": false,
+        "actor_rollout_ref.actor.fsdp_config.optimizer_offload": false
+      },
+      "status": "success",
+      "throughput": 26.917608585085087,
+      "throughput_p10": 15.92956886119421,
+      "throughput_cv": 0.2802133609399188,
+      "step_time": 2.0246969498693943,
+      "step_time_p95": 4.040370185207576,
+      "gen_time": 0.07629532180726528,
+      "actor_time": 0.23823563987389207,
+      "peak_memory_gb": 3.2530508041381836,
+      "peak_reserved_memory_gb": 4.337890625,
+      "device_memory_used_gb": 37.2056884765625,
+      "device_memory_utilization": 0.9301422119140625,
+      "gpu_utilization": 0.016,
+      "power_watts": 57.925,
+      "throughput_per_gb": 8.27457368659702,
+      "energy_per_1k_tokens": 2401.845097964877,
+      "mfu": null,
+      "grad_norm": null,
+      "ttft_ms": null,
+      "tpot_ms": null,
+      "kv_usage": null,
+      "transfer_queue_latency_ms": null,
+      "samples": 5,
+      "duration_s": 149.10336464596912,
+      "gpu_count": 2,
+      "utility": 0.8,
+      "utility_components": {
+        "throughput": {
+          "raw": 26.917608585085087,
+          "normalized": 1.0,
+          "effective_weight": 0.6,
+          "contribution": 0.6
+        },
+        "step_time": {
+          "raw": 2.0246969498693943,
+          "normalized": 1.0,
+          "effective_weight": 0.2,
+          "contribution": 0.2
+        },
+        "peak_memory_gb": {
+          "raw": 3.2530508041381836,
+          "normalized": 0.0,
+          "effective_weight": 0.1,
+          "contribution": 0.0
+        },
+        "throughput_cv": {
+          "raw": 0.2802133609399188,
+          "normalized": 0.0,
+          "effective_weight": 0.1,
+          "contribution": 0.0
+        }
+      },
+      "constraint_violations": [],
+      "metric_reliability": {
+        "throughput": "reliable",
+        "step_time": "reliable",
+        "peak_memory_gb": "reliable",
+        "gpu.memory_reserved_gb": "reliable",
+        "gpu.memory_used_gb": "partial",
+        "gpu.memory_utilization": "partial",
+        "gpu.utilization": "partial",
+        "gpu.power_watts": "partial",
+        "training.mfu": "all_zero",
+        "training.grad_norm": "all_zero",
+        "rollout.ttft_ms": "unavailable",
+        "rollout.tpot_ms": "unavailable",
+        "vllm.kv_usage": "unavailable",
+        "transfer_queue.latency_ms": "unavailable",
+        "throughput_per_gb": "derived",
+        "energy_per_1k_tokens": "derived_from_partial"
+      },
+      "error": null
+    },
+    {
+      "trial": 7,
+      "config": {
+        "actor_rollout_ref.actor.use_dynamic_bsz": true,
+        "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 128,
+        "actor_rollout_ref.actor.fsdp_config.param_offload": true,
+        "actor_rollout_ref.actor.fsdp_config.optimizer_offload": false
+      },
+      "status": "success",
+      "throughput": 18.47607266295891,
+      "throughput_p10": 10.910061496616612,
+      "throughput_cv": 0.25399189969142516,
+      "step_time": 3.3745694970712066,
+      "step_time_p95": 5.30186426891014,
+      "gen_time": 0.07270992686972022,
+      "actor_time": 0.8456223020330071,
+      "peak_memory_gb": 3.0141382217407227,
+      "peak_reserved_memory_gb": 3.09375,
+      "device_memory_used_gb": 37.0045166015625,
+      "device_memory_utilization": 0.9251129150390625,
+      "gpu_utilization": null,
+      "power_watts": 60.205200000000005,
+      "throughput_per_gb": 6.129802717636693,
+      "energy_per_1k_tokens": 3770.349850490225,
+      "mfu": null,
+      "grad_norm": null,
+      "ttft_ms": null,
+      "tpot_ms": null,
+      "kv_usage": null,
+      "transfer_queue_latency_ms": null,
+      "samples": 5,
+      "duration_s": 160.07189266802743,
+      "gpu_count": 2,
+      "utility": 0.1990647180917857,
+      "utility_components": {
+        "throughput": {
+          "raw": 18.47607266295891,
+          "normalized": 0.22786941974376715,
+          "effective_weight": 0.6,
+          "contribution": 0.13672165184626028
+        },
+        "step_time": {
+          "raw": 3.3745694970712066,
+          "normalized": 0.0502493511478439,
+          "effective_weight": 0.2,
+          "contribution": 0.010049870229568781
+        },
+        "peak_memory_gb": {
+          "raw": 3.0141382217407227,
+          "normalized": 0.33819142013991077,
+          "effective_weight": 0.1,
+          "contribution": 0.033819142013991076
+        },
+        "throughput_cv": {
+          "raw": 0.25399189969142516,
+          "normalized": 0.18474054001965567,
+          "effective_weight": 0.1,
+          "contribution": 0.018474054001965567
+        }
+      },
+      "constraint_violations": [],
+      "metric_reliability": {
+        "throughput": "reliable",
+        "step_time": "reliable",
+        "peak_memory_gb": "reliable",
+        "gpu.memory_reserved_gb": "reliable",
+        "gpu.memory_used_gb": "partial",
+        "gpu.memory_utilization": "partial",
+        "gpu.utilization": "all_zero",
+        "gpu.power_watts": "partial",
+        "training.mfu": "all_zero",
+        "training.grad_norm": "all_zero",
+        "rollout.ttft_ms": "unavailable",
+        "rollout.tpot_ms": "unavailable",
+        "vllm.kv_usage": "unavailable",
+        "transfer_queue.latency_ms": "unavailable",
+        "throughput_per_gb": "derived",
+        "energy_per_1k_tokens": "derived_from_partial"
+      },
+      "error": null
+    },
+    {
+      "trial": 8,
+      "config": {
+        "actor_rollout_ref.actor.use_dynamic_bsz": true,
+        "actor_rollout_ref.actor.ppo_max_token_len_per_gpu": 128,
+        "actor_rollout_ref.actor.fsdp_config.param_offload": true,
+        "actor_rollout_ref.actor.fsdp_config.optimizer_offload": true
+      },
+      "status": "success",
+      "throughput": 15.984825791629556,
+      "throughput_p10": 11.99070388600086,
+      "throughput_cv": 0.18325163301461625,
+      "step_time": 3.409483513329178,
+      "step_time_p95": 5.358550565876067,
+      "gen_time": 0.07364820130169392,
+      "actor_time": 0.8773043598048389,
+      "peak_memory_gb": 2.5475854873657227,
+      "peak_reserved_memory_gb": 2.64453125,
+      "device_memory_used_gb": 36.5572509765625,
+      "device_memory_utilization": 0.9139312744140625,
+      "gpu_utilization": null,
+      "power_watts": 58.748000000000005,
+      "throughput_per_gb": 6.274500255596262,
+      "energy_per_1k_tokens": 3827.143869338107,
+      "mfu": null,
+      "grad_norm": null,
+      "ttft_ms": null,
+      "tpot_ms": null,
+      "kv_usage": null,
+      "transfer_queue_latency_ms": null,
+      "samples": 5,
+      "duration_s": 163.19006227701902,
+      "gpu_count": 2,
+      "utility": 0.1733119977536051,
+      "utility_components": {
+        "throughput": {
+          "raw": 15.984825791629556,
+          "normalized": 0.0,
+          "effective_weight": 0.6,
+          "contribution": 0.0
+        },
+        "step_time": {
+          "raw": 3.409483513329178,
+          "normalized": 0.025684358205524505,
+          "effective_weight": 0.2,
+          "contribution": 0.005136871641104901
+        },
+        "peak_memory_gb": {
+          "raw": 2.5475854873657227,
+          "normalized": 0.9986176322091695,
+          "effective_weight": 0.1,
+          "contribution": 0.09986176322091696
+        },
+        "throughput_cv": {
+          "raw": 0.18325163301461625,
+          "normalized": 0.6831336289158323,
+          "effective_weight": 0.1,
+          "contribution": 0.06831336289158323
+        }
+      },
+      "constraint_violations": [],
+      "metric_reliability": {
+        "throughput": "reliable",
+        "step_time": "reliable",
+        "peak_memory_gb": "reliable",
+        "gpu.memory_reserved_gb": "reliable",
+        "gpu.memory_used_gb": "partial",
+        "gpu.memory_utilization": "partial",
+        "gpu.utilization": "all_zero",
+        "gpu.power_watts": "partial",
+        "training.mfu": "all_zero",
+        "training.grad_norm": "all_zero",
+        "rollout.ttft_ms": "unavailable",
+        "rollout.tpot_ms": "unavailable",
+        "vllm.kv_usage": "unavailable",
+        "transfer_queue.latency_ms": "unavailable",
+        "throughput_per_gb": "derived",
+        "energy_per_1k_tokens": "derived_from_partial"
+      },
+      "error": null
+    }
+  ]
+}

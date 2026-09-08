@@ -165,6 +165,33 @@ class FSDPEngine(BaseEngine):
             else entropy_from_logits
         )
 
+        self._apply_entropy_kernel_config()
+
+    def _apply_entropy_kernel_config(self):
+        """Apply Athena entropy-kernel decision knobs to the global kernel config.
+
+        The triton entropy kernels in ``verl.utils.kernel.kernels`` read their
+        strategy / tile-size settings from a module-level ``_config``. Defaults
+        are a no-op, so this is safe to call for every engine construction
+        (ref / critic workers included). A bad strategy name fails fast here.
+        """
+        from verl.utils.kernel import kernels
+
+        ec = self.engine_config
+        kernels.set_forward_fused(ec.entropy_kernel_forward_fused)
+        kernels.set_backward_method(ec.entropy_kernel_backward_method)
+        kernels.configure(
+            vocab_per_split=ec.entropy_kernel_vocab_per_split,
+            n_group=ec.entropy_kernel_n_group,
+            block_size_m=ec.entropy_kernel_block_size_m,
+            block_size_n=ec.entropy_kernel_block_size_n,
+            block_size_k=ec.entropy_kernel_block_size_k,
+        )
+        if ec.use_fused_kernels:
+            # JIT-compile the selected kernels here instead of inside the first
+            # training step (warmup is a no-op without triton/CUDA).
+            kernels.warmup_entropy_kernels()
+
     @property
     def is_param_offload_enabled(self) -> bool:
         return self._is_offload_param
@@ -393,7 +420,21 @@ class FSDPEngine(BaseEngine):
         )
 
         fsdp_mesh = self.device_mesh
-        sharding_strategy = get_sharding_strategy(fsdp_mesh, zero3_enable=self.engine_config.reshard_after_forward)
+        configured_sharding = self.engine_config.sharding_strategy
+        if configured_sharding is None:
+            sharding_strategy = get_sharding_strategy(fsdp_mesh, zero3_enable=self.engine_config.reshard_after_forward)
+        else:
+            from torch.distributed.fsdp import ShardingStrategy
+
+            valid_sharding = {"FULL_SHARD", "SHARD_GRAD_OP", "NO_SHARD"}
+            if configured_sharding not in valid_sharding:
+                raise ValueError(
+                    f"Unsupported FSDP sharding_strategy={configured_sharding!r}; "
+                    f"expected one of {sorted(valid_sharding)}"
+                )
+            if fsdp_mesh.ndim != 1:
+                raise ValueError("Explicit FSDP sharding_strategy currently requires a one-dimensional FSDP mesh")
+            sharding_strategy = getattr(ShardingStrategy, configured_sharding)
 
         # Note: We force turn off CPUOffload because it causes incorrect results when using grad accumulation
         if self.engine_config.strategy == "fsdp":

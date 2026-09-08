@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import time
-from typing import List
 
 import pynvml
 import torch
@@ -39,7 +38,8 @@ class AthenaTrainer(PPOTrainer):
         )
 
         self.controller = AthenaController(config=config, trainer=self)
-        self._pending_actions: List[OptimizationAction] = []
+        self._pending_actions: list[OptimizationAction] = []
+        self._applied_action_records: list[dict] = []
         self._restart_request_path = os.path.join(self._athena_log_dir, "restart_requests.jsonl")
 
     def on_init_end(self):
@@ -89,7 +89,15 @@ class AthenaTrainer(PPOTrainer):
         # 在 batch 刚构造完、准备进入 prepare_micro_batches 之前
         if self._pending_actions:
             for action in self._pending_actions:
-                self.controller.apply_hot_action(action, batch)
+                record = action.to_dict()
+                try:
+                    self.controller.apply_hot_action(action, batch)
+                    record["status"] = "applied"
+                except Exception as exc:
+                    record["status"] = "failed"
+                    record["error"] = str(exc)
+                    logger.exception("[Athena] Failed to apply hot parameter %s", action.parameter)
+                self._applied_action_records.append(record)
             self._pending_actions = []
 
         if self.reward_loop_manager.reward_loop_worker_handles is None:
@@ -136,8 +144,30 @@ class AthenaTrainer(PPOTrainer):
                     request_file.write(json.dumps(action.to_dict()) + "\n")
                 logger.warning("[Athena] Restart probe requested: %s", action.to_dict())
 
+        state.extra["athena_actions"] = {
+            "applied": self._applied_action_records,
+            "scheduled": [action.to_dict() for action in actions if action.apply_immediately],
+        }
+        self._applied_action_records = []
+        self._athena_log_file.write(state.to_json() + "\n")
+        self._athena_log_file.flush()
+
     def _build_runtime_state(self, batch, metrics, timing_raw, global_steps, epoch):
         gpu_stats = self.collect_gpu_stats(metrics)
+        metric_sources = {
+            "gpu.memory_peak_gb": "actor_worker_peak"
+            if "actor/perf/max_memory_allocated_gb" in metrics
+            else "unavailable",
+            "gpu.memory_reserved_gb": "actor_worker_peak"
+            if "actor/perf/max_memory_reserved_gb" in metrics
+            else "trainer_process_snapshot",
+            "gpu.memory_used_gb": "nvml_step_end_snapshot" if torch.cuda.is_available() else "unavailable",
+            "gpu.memory_utilization": "nvml_step_end_snapshot" if torch.cuda.is_available() else "unavailable",
+            "gpu.utilization": "nvml_step_end_snapshot" if torch.cuda.is_available() else "unavailable",
+            "gpu.power_watts": "nvml_step_end_snapshot" if torch.cuda.is_available() else "unavailable",
+            "training.grad_norm": "actor_metrics" if "actor/grad_norm" in metrics else "unavailable",
+            "training.mfu": "actor_metrics" if "perf/mfu/actor" in metrics else "unavailable",
+        }
 
         training_stats = TrainingStats(
             entropy=metrics.get("actor/entropy", 0.0),
@@ -174,6 +204,15 @@ class AthenaTrainer(PPOTrainer):
         vllm_stats.scheduler_queue = int(metrics.get("vllm/scheduler_queue", 0))
         vllm_stats.num_running = int(metrics.get("vllm/num_running", 0))
         vllm_stats.num_waiting = int(metrics.get("vllm/num_waiting", 0))
+        for field, key in {
+            "vllm.kv_usage": "vllm/kv_usage",
+            "vllm.prefix_cache_hit": "vllm/prefix_cache_hit",
+            "vllm.num_evictions": "vllm/num_evictions",
+            "vllm.scheduler_queue": "vllm/scheduler_queue",
+            "vllm.num_running": "vllm/num_running",
+            "vllm.num_waiting": "vllm/num_waiting",
+        }.items():
+            metric_sources[field] = "trainer_metrics" if key in metrics else "unavailable"
 
         tq_stats.running = int(metrics.get("tq/running", 0))
         tq_stats.finished = int(metrics.get("tq/finished", 0))
@@ -181,6 +220,14 @@ class AthenaTrainer(PPOTrainer):
         tq_stats.failure = int(metrics.get("tq/failure", 0))
         tq_stats.queue_length = tq_stats.running + tq_stats.pending
         tq_stats.latency_ms = float(metrics.get("tq/latency_ms", 0.0))
+        for field, key in {
+            "transfer_queue.running": "tq/running",
+            "transfer_queue.finished": "tq/finished",
+            "transfer_queue.pending": "tq/pending",
+            "transfer_queue.failure": "tq/failure",
+            "transfer_queue.latency_ms": "tq/latency_ms",
+        }.items():
+            metric_sources[field] = "trainer_metrics" if key in metrics else "unavailable"
 
         rollout_stats.generate_latency_ms = timing_raw.get("gen", 0.0) * 1000
         rollout_stats.request_latency_ms = float(metrics.get("rollout/request_latency_ms", 0.0))
@@ -188,6 +235,12 @@ class AthenaTrainer(PPOTrainer):
         rollout_stats.tpot_ms = float(metrics.get("rollout/tpot_ms", 0.0))
         rollout_stats.num_preempted = int(metrics.get("num_preempted", 0))
         rollout_stats.num_aborted = int(metrics.get("response/aborted_ratio", 0.0) * batch_size)
+        for field, key in {
+            "rollout.request_latency_ms": "rollout/request_latency_ms",
+            "rollout.ttft_ms": "rollout/ttft_ms",
+            "rollout.tpot_ms": "rollout/tpot_ms",
+        }.items():
+            metric_sources[field] = "trainer_metrics" if key in metrics else "unavailable"
 
         state = RuntimeState(
             global_step=global_steps,
@@ -214,11 +267,9 @@ class AthenaTrainer(PPOTrainer):
                 "critic_loss": metrics.get("critic/loss", 0.0),
                 "actor_loss": metrics.get("actor/loss", 0.0),
                 "kl": metrics.get("actor/kl", 0.0),
+                "metric_sources": metric_sources,
             },
         )
-
-        self._athena_log_file.write(state.to_json() + "\n")
-        self._athena_log_file.flush()
 
         print(
             f"[Athena] Step {global_steps}: "
@@ -235,6 +286,8 @@ class AthenaTrainer(PPOTrainer):
             return gpu
 
         gpu.memory_peak_gb = metrics.get("actor/perf/max_memory_allocated_gb", 0.0)
+        gpu.memory_allocated_gb = gpu.memory_peak_gb
+        gpu.memory_reserved_gb = metrics.get("actor/perf/max_memory_reserved_gb", 0.0)
 
         try:
             if not _pynvml_initialized:
@@ -243,13 +296,15 @@ class AthenaTrainer(PPOTrainer):
             handle = pynvml.nvmlDeviceGetHandleByIndex(torch.cuda.current_device())
             mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
             gpu.memory_used_gb = mem.used / 1024**3
-            gpu.memory_reserved_gb = torch.cuda.memory_reserved() / 1024**3
-            gpu.memory_allocated_gb = mem.used / 1024**3
+            if "actor/perf/max_memory_reserved_gb" not in metrics:
+                gpu.memory_reserved_gb = torch.cuda.memory_reserved() / 1024**3
             gpu.memory_utilization = mem.used / mem.total
             util = pynvml.nvmlDeviceGetUtilizationRates(handle)
             gpu.utilization = util.gpu / 100.0
             try:
-                gpu.utilization = torch.cuda.utilization() / 100.0
+                torch_utilization = torch.cuda.utilization() / 100.0
+                if torch_utilization > 0:
+                    gpu.utilization = max(gpu.utilization, torch_utilization)
             except Exception:
                 pass
             gpu.power_watts = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0

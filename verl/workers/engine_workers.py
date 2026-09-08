@@ -496,6 +496,67 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         self.actor.set_loss_fn(loss_fn=loss_fn)
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def apply_actor_runtime_overrides(self, overrides: dict[str, float]):
+        """Apply Athena's algorithmic hot parameters to every live actor rank."""
+        if not self._is_actor or self.actor is None:
+            raise RuntimeError("Actor runtime overrides require an initialized actor worker")
+
+        supported = {"entropy_coeff", "kl_loss_coef", "lr"}
+        unknown = set(overrides) - supported
+        if unknown:
+            raise ValueError(f"Unsupported actor runtime overrides: {sorted(unknown)}")
+
+        loss_config = self.loss_fn.keywords.get("config") if isinstance(self.loss_fn, partial) else None
+        for name in ("entropy_coeff", "kl_loss_coef"):
+            if name in overrides:
+                if loss_config is None:
+                    raise RuntimeError("The active actor loss function does not expose a mutable config")
+                setattr(loss_config, name, float(overrides[name]))
+
+        if "lr" in overrides:
+            new_lr = float(overrides["lr"])
+            if new_lr <= 0:
+                raise ValueError("Actor learning rate must be positive")
+            engine = self.actor.engine
+            optimizer = engine.optimizer
+            visited = set()
+            updated_groups = 0
+
+            def update_optimizer(candidate):
+                nonlocal updated_groups
+                if candidate is None or id(candidate) in visited:
+                    return
+                visited.add(id(candidate))
+                for group in getattr(candidate, "param_groups", ()):
+                    group["lr"] = new_lr
+                    updated_groups += 1
+                for attribute in ("optimizer", "optim", "chained_optimizers"):
+                    nested = getattr(candidate, attribute, None)
+                    if isinstance(nested, (list, tuple)):
+                        for item in nested:
+                            update_optimizer(item)
+                    else:
+                        update_optimizer(nested)
+
+            update_optimizer(optimizer)
+            if updated_groups == 0:
+                raise RuntimeError("Could not locate actor optimizer parameter groups")
+
+            scheduler = getattr(engine, "lr_scheduler", None)
+            if scheduler is not None:
+                for attribute in ("base_lrs", "_last_lr"):
+                    values = getattr(scheduler, attribute, None)
+                    if isinstance(values, list):
+                        setattr(scheduler, attribute, [new_lr] * len(values))
+                # Megatron's scheduler computes future values from these
+                # scalar bounds rather than PyTorch-style base_lrs.
+                for attribute in ("max_lr",):
+                    if hasattr(scheduler, attribute):
+                        setattr(scheduler, attribute, new_lr)
+
+        return {name: float(value) for name, value in overrides.items()}
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def to(self, device, model=True, optimizer=True, grad=True):
         """Manual control of load/offload"""
         self.actor.to(device=device, model=model, optimizer=optimizer, grad=grad)

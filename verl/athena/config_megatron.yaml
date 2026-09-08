@@ -1,0 +1,150 @@
+# === 基础算法设置（不变） ===
+algorithm:
+  adv_estimator: grpo
+  use_kl_in_reward: false
+
+# === 切换后端为 Megatron ===
+model_engine: megatron   # 原来是 dp
+
+# === 数据部分（不变） ===
+data:
+  train_files: ["/home/hx/data/gsm8k/train.parquet"]
+  val_files: ["/home/hx/data/gsm8k/test.parquet"]
+  train_batch_size: 16
+  max_prompt_length: 4096
+  max_response_length: 32
+  filter_overlong_prompts: true
+  truncation: error
+  dataloader_num_workers: 2
+  val_batch_size: 1
+
+# === Actor/Rollout/Ref ===
+actor_rollout_ref:
+  model:
+    path: /home/hx/Qwen2.5-1.5B-Instruct
+    # BSHD is more conservative for this Qwen2.5/TransformerEngine setup.
+    use_remove_padding: true
+    enable_gradient_checkpointing: false   # 建议开启，节省显存
+    trust_remote_code: false          # Qwen2.5 官方模型不需要
+
+  actor:
+    use_dynamic_bsz: true             # 保持 true（Megatron 也支持动态批次）
+    ppo_max_token_len_per_gpu: 2048
+    ppo_mini_batch_size: 4
+    ppo_micro_batch_size_per_gpu: 1
+    use_kl_loss: false                # 你之前设 false，保持
+    kl_loss_coef: 0.001
+    entropy_coeff: 0
+    optim:
+      lr: 1e-6
+
+    # ---------- 删除 fsdp_config ----------
+    # 原 fsdp_config 已移除，不再需要
+
+    # ---------- 新增 Megatron 专用配置 ----------
+    megatron:
+      # 基础并行度（你只有 2 张卡）
+      tensor_model_parallel_size: 2          # 与 n_gpus 一致
+      pipeline_model_parallel_size: 1        # 1.5B 不需要 PP
+      context_parallel_size: 1               # 默认
+
+      # 密集模型（非 MoE），以下三项保留默认 1，或删除
+      expert_model_parallel_size: 1
+      expert_tensor_parallel_size: 1
+
+      # 卸载策略（根据显存情况，建议全部开启）
+      param_offload: false
+      optimizer_offload: false
+      grad_offload: false
+
+      # 数据类型（推荐 bfloat16 或 float16）
+      dtype: bfloat16
+
+      # use_remove_padding 需与 model.use_remove_padding 一致
+      use_remove_padding: true
+
+      # 可选：使用 mbridge（加速 Megatron 模型加载，建议开启）
+      use_mbridge: true
+      vanilla_mbridge: true
+
+      # 覆盖 Transformer 配置（可选，用于重计算等）
+      override_transformer_config:
+        recompute_method: uniform          # 激活重计算策略
+        recompute_granularity: full
+        recompute_num_layers: 1
+        # The installed TE rejects the flash backend for the BSHD inputs used
+        # here. Valid Megatron names are flash/fused/unfused/local/auto;
+        # "torch" is not a valid value.
+        attention_backend: unfused
+        # 以下 MoE 相关参数对密集模型无效，可省略
+        # moe_aux_loss_coeff: ...
+        # moe_z_loss_coeff: ...
+
+
+  rollout:
+    name: vllm
+    n: 8
+    tensor_model_parallel_size: 2          # 与训练 TP 一致（vLLM 推理 TP）
+    gpu_memory_utilization: 0.4
+    enforce_eager: false
+    max_num_batched_tokens: 4096
+    max_num_seqs: 32
+    log_prob_use_dynamic_bsz: true
+    log_prob_max_token_len_per_gpu: 2048
+    log_prob_micro_batch_size_per_gpu: 1
+    dtype: bfloat16                        # 与训练一致
+    calculate_log_probs: true              # 显式开启
+
+  ref:
+    log_prob_use_dynamic_bsz: true
+    log_prob_max_token_len_per_gpu: 2048
+    log_prob_micro_batch_size_per_gpu: 1
+    # ---------- 删除 fsdp_config ----------
+    # ---------- 增加 ref 的 Megatron 配置（通常与 actor 一致） ----------
+    megatron:
+      tensor_model_parallel_size: 2
+      pipeline_model_parallel_size: 1
+      context_parallel_size: 1
+      expert_model_parallel_size: 1
+      expert_tensor_parallel_size: 1
+      param_offload: true
+      # ref 不需要优化器，所以无需 optimizer_offload
+      dtype: bfloat16
+      use_remove_padding: true
+
+# === Critic 禁用（GRPO） ===
+critic:
+  enable: false
+
+# === Reward Model 禁用 ===
+reward:
+  reward_model:
+    enable: false
+
+# === Trainer 设置 ===
+trainer:
+  n_gpus_per_node: 2
+  nnodes: 1
+  total_epochs: 1
+  total_training_steps: 10
+  save_freq: -1
+  test_freq: -1
+  logger: ["console"]
+  project_name: athena_test
+  experiment_name: qwen1.5b_megatron
+  default_local_dir: ./checkpoints
+  val_before_train: false                # 按需
+  critic_warmup: 0                       # 添加默认
+  v1:
+    trainer_mode: athena_trainer
+  athena_log_dir: ./athena_logs
+  athena:
+    enabled: true
+    window_size: 5
+    cooldown_steps: 5
+    num_step_demo: 20
+    low_memory_threshold: 0.70
+    high_memory_threshold: 0.90
+    low_gpu_utilization_threshold: 0.7
+    min_token_budget: 512
+    max_token_budget: 4096

@@ -42,6 +42,27 @@ entropy_from_logits_chunk_size: 2048
 # recompute entropy
 entropy_checkpointing: False
 
+# Entropy kernel backward strategy (one of SUPPORTED_BACKWARD_METHODS in verl.utils.kernel.kernels)
+entropy_kernel_backward_method: split_dlogits_n
+
+# Whether to use the fused forward entropy kernel (single-pass mainloop + epilogue)
+entropy_kernel_forward_fused: False
+
+# Override vocab_per_split for all entropy kernel families; null keeps per-strategy defaults
+entropy_kernel_vocab_per_split: null
+
+# Override n_group for grouped / owner-compute entropy strategies; null keeps defaults
+entropy_kernel_n_group: null
+
+# Override BLOCK_SIZE_M for the entropy kernels; null keeps per-family defaults
+entropy_kernel_block_size_m: null
+
+# Override BLOCK_SIZE_N for the entropy kernels; null keeps per-family defaults
+entropy_kernel_block_size_n: null
+
+# Override BLOCK_SIZE_K for the entropy kernels; null keeps per-family defaults
+entropy_kernel_block_size_k: null
+
 # fsdp config
 fsdp_config:
 
@@ -53,6 +74,27 @@ fsdp_config:
 
   # Whether to recompute entropy
   entropy_checkpointing: ${oc.select:actor_rollout_ref.actor.entropy_checkpointing,False}
+
+  # Entropy kernel backward strategy
+  entropy_kernel_backward_method: ${oc.select:actor_rollout_ref.actor.entropy_kernel_backward_method,split_dlogits_n}
+
+  # Whether to use the fused forward entropy kernel
+  entropy_kernel_forward_fused: ${oc.select:actor_rollout_ref.actor.entropy_kernel_forward_fused,False}
+
+  # Override vocab_per_split for all entropy kernel families; null keeps per-strategy defaults
+  entropy_kernel_vocab_per_split: ${oc.select:actor_rollout_ref.actor.entropy_kernel_vocab_per_split,null}
+
+  # Override n_group for grouped / owner-compute entropy strategies; null keeps defaults
+  entropy_kernel_n_group: ${oc.select:actor_rollout_ref.actor.entropy_kernel_n_group,null}
+
+  # Override BLOCK_SIZE_M for the entropy kernels; null keeps per-family defaults
+  entropy_kernel_block_size_m: ${oc.select:actor_rollout_ref.actor.entropy_kernel_block_size_m,null}
+
+  # Override BLOCK_SIZE_N for the entropy kernels; null keeps per-family defaults
+  entropy_kernel_block_size_n: ${oc.select:actor_rollout_ref.actor.entropy_kernel_block_size_n,null}
+
+  # Override BLOCK_SIZE_K for the entropy kernels; null keeps per-family defaults
+  entropy_kernel_block_size_k: ${oc.select:actor_rollout_ref.actor.entropy_kernel_block_size_k,null}
 
 # Whether to remove padding tokens in inputs during training
 use_remove_padding: ${oc.select:actor_rollout_ref.model.use_remove_padding,false}

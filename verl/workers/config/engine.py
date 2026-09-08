@@ -85,6 +85,13 @@ class EngineConfig(BaseConfig):
         "use_remove_padding",
         "forward_only",
         "param_offload",
+        "entropy_kernel_backward_method",
+        "entropy_kernel_forward_fused",
+        "entropy_kernel_vocab_per_split",
+        "entropy_kernel_n_group",
+        "entropy_kernel_block_size_m",
+        "entropy_kernel_block_size_n",
+        "entropy_kernel_block_size_k",
     }
     # whether to offload param
     param_offload: bool = False
@@ -110,6 +117,27 @@ class EngineConfig(BaseConfig):
     use_fused_kernels: bool = False
     # TODO (this may conflict with the one in model config)
     use_remove_padding: bool = True
+
+    # backward strategy for the entropy kernels (one of SUPPORTED_BACKWARD_METHODS in verl.utils.kernel.kernels)
+    entropy_kernel_backward_method: str = "split_dlogits_n"
+
+    # whether to use the fused forward entropy kernel (single-pass mainloop + epilogue)
+    entropy_kernel_forward_fused: bool = False
+
+    # override vocab_per_split for all entropy kernel families; None keeps per-strategy defaults
+    entropy_kernel_vocab_per_split: Optional[int] = None
+
+    # override n_group for the grouped / owner-compute entropy strategies; None keeps defaults
+    entropy_kernel_n_group: Optional[int] = None
+
+    # override BLOCK_SIZE_M for the entropy kernels; None keeps per-family defaults
+    entropy_kernel_block_size_m: Optional[int] = None
+
+    # override BLOCK_SIZE_N for the entropy kernels; None keeps per-family defaults
+    entropy_kernel_block_size_n: Optional[int] = None
+
+    # override BLOCK_SIZE_K for the entropy kernels; None keeps per-family defaults
+    entropy_kernel_block_size_k: Optional[int] = None
 
     seed: int = 42
 
@@ -259,6 +287,9 @@ class FSDPEngineConfig(EngineConfig):
     wrap_policy: dict[str, Any] = field(default_factory=dict)
     offload_policy: bool = False
     reshard_after_forward: bool = True
+    # Explicit FSDP1 sharding mode. ``None`` preserves the historical
+    # reshard_after_forward based selection.
+    sharding_strategy: Optional[str] = None
     fsdp_size: int = -1
     forward_prefetch: bool = False
     model_dtype: str = "fp32"

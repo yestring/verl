@@ -180,6 +180,14 @@ class ActorConfig(BaseConfig):
     checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
     optim: OptimizerConfig = field(default_factory=OptimizerConfig)
     use_fused_kernels: bool = False
+    # entropy kernel decision space (mirrored into engine configs via oc.select)
+    entropy_kernel_backward_method: str = "split_dlogits_n"
+    entropy_kernel_forward_fused: bool = False
+    entropy_kernel_vocab_per_split: Optional[int] = None
+    entropy_kernel_n_group: Optional[int] = None
+    entropy_kernel_block_size_m: Optional[int] = None
+    entropy_kernel_block_size_n: Optional[int] = None
+    entropy_kernel_block_size_k: Optional[int] = None
     profiler: ProfilerConfig = field(default_factory=ProfilerConfig)
     engine: BaseConfig = field(default_factory=BaseConfig)
     rollout_n: int = MISSING  # must be override by sampling config
