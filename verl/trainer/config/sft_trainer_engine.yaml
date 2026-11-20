@@ -70,6 +70,15 @@ trainer:
   max_ckpt_to_keep: null  # Maximum number of checkpoints to keep, set to null to keep all
   balance_batch: True
 
+  # Enable the Ray FSDP2 batch-balance experiment and write one JSON record per step.
+  sft_batch_balance_metrics_path: null
+
+  # Measure individual microbatches for calibration. Use a separate run for profiling.
+  sft_batch_balance_profile: false
+
+  # Cost parameters from examples/sft/batch_balance/fit_cost.py.
+  sft_batch_balance_cost_model: null
+
   # Resume mode: "auto", "disable", or "resume_path"
   # "auto": resume from last checkpoint if available
   # "disable": start from scratch

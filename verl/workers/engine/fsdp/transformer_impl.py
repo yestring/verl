@@ -692,6 +692,14 @@ class FSDPEngine(BaseEngine):
             data=data, dp_group=self.get_data_parallel_group(), same_micro_num_in_dp=True
         )
 
+        profile_balance = not forward_only and tu.get_non_tensor_data(data, "sft_balance_profile", False)
+        if profile_balance:
+            if not indices or not data["input_ids"].is_nested:
+                raise ValueError("SFT balance profiling requires dynamic batches with no padding.")
+            # Read the local lengths once. The partition indices are from the actual training microbatches.
+            lengths = data["input_ids"].offsets().diff().tolist()
+            events = [(torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)) for _ in indices]
+
         output_lst = []
 
         ctx = torch.no_grad() if forward_only else nullcontext()
@@ -700,7 +708,9 @@ class FSDPEngine(BaseEngine):
         # and _build_fsdp_module, so self.scaler may not be set.
         scaler = getattr(self, "scaler", None)
 
-        for micro_batch in micro_batches:
+        for i, micro_batch in enumerate(micro_batches):
+            if profile_balance:
+                events[i][0].record()
             with ctx:
                 loss, meta_info = self.forward_step(micro_batch, loss_function=loss_function, forward_only=forward_only)
 
@@ -713,10 +723,26 @@ class FSDPEngine(BaseEngine):
                     # full-length nested tensors across the mini-batch (∝ ppo_mini_batch * rollout_n) → OOM.
                     meta_info.pop("model_output", None)
 
+            if profile_balance:
+                events[i][1].record()
             output_lst.append(meta_info)
 
-        # postprocess and return
-        return postprocess_batch_func(output_lst=output_lst, indices=indices, data=data)
+        output = postprocess_batch_func(output_lst=output_lst, indices=indices, data=data)
+        if profile_balance:
+            events[-1][1].synchronize()
+            samples = []
+            for partition, (start, end) in zip(indices, events, strict=True):
+                micro_lengths = [lengths[index] for index in partition]
+                samples.append(
+                    {
+                        "tokens": sum(micro_lengths),
+                        "sum_squared_lengths": sum(length * length for length in micro_lengths),
+                        "elapsed_ms": start.elapsed_time(end),
+                        "samples": len(partition),
+                    }
+                )
+            output["metrics"]["sft_balance_microbatches"] = samples
+        return output
 
     def forward_step(self, micro_batch: TensorDict, loss_function, forward_only):
         raise NotImplementedError("forward_step must be implemented in subclass")

@@ -344,6 +344,15 @@ class TrainingWorker(Worker, DistProfilerExtension):
             if key not in data.keys():
                 tu.assign_non_tensor(data, **{key: val})
 
+        balance_telemetry = tu.get_non_tensor_data(data, "sft_balance_log_metrics", False)
+        balance_profile = tu.get_non_tensor_data(data, "sft_balance_profile", False)
+        if balance_profile or balance_telemetry:
+            if self.device_name != "cuda" or self.engine_config.strategy != "fsdp2":
+                raise ValueError("SFT balance telemetry requires CUDA with FSDP2.")
+            if self.engine_config.ulysses_sequence_parallel_size != 1:
+                raise ValueError("SFT balance telemetry requires Ulysses sequence parallel size 1.")
+        if balance_telemetry:
+            torch.cuda.reset_peak_memory_stats()
         with (
             self.engine.train_mode(disable_auto_offload=disable_auto_offload),
             Timer(name="train_batch", logger=None) as timer,
@@ -352,6 +361,9 @@ class TrainingWorker(Worker, DistProfilerExtension):
             # containing loss, model_output and metrics
             # for training, we only care about loss and metrics
         delta_time = timer.last
+        if balance_telemetry:
+            output["metrics"]["sft_balance_rank_wall_ms"] = delta_time * 1e3
+            output["metrics"]["sft_balance_step_peak_bytes"] = torch.cuda.max_memory_allocated()
 
         update_lr_scheduler = tu.get(data, key="update_lr_scheduler", default=False)
         # update lr scheduler

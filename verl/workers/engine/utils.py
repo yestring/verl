@@ -21,11 +21,13 @@ from tensordict import TensorDict
 
 from verl.utils import tensordict_utils as tu
 from verl.utils.dataset.dataset_utils import DatasetPadMode
+from verl.utils.device import get_device_name
 from verl.utils.device import is_npu_available
 from verl.utils.device import manual_seed as device_manual_seed
 from verl.utils.device import manual_seed_all as device_manual_seed_all
 from verl.utils.py_functional import append_to_dict
 from verl.utils.seqlen_balancing import rearrange_micro_batches, restore_dynamic_batch
+from verl.utils.sft_batch_balance import partition_under_token_cap, split_to_microbatch_count
 
 
 def enable_full_determinism(seed: int):
@@ -54,6 +56,25 @@ def enable_full_determinism(seed: int):
     torch.backends.cudnn.enabled = False
 
 
+def _prepare_capped_sft_micro_batches(data: TensorDict, limit: int, dp_group):
+    """Pack a DP rank's SFT samples and synchronize a feasible microbatch count."""
+    lengths = data["input_ids"].offsets().diff().tolist()
+    valid = bool(lengths) and 0 < min(lengths) and max(lengths) <= limit
+    partitions = partition_under_token_cap(lengths, limit) if valid else []
+    state = (len(partitions), -len(lengths), int(not valid))
+    if dp_group is not None and torch.distributed.is_initialized():
+        counts = torch.tensor(state, device=get_device_name())
+        torch.distributed.all_reduce(counts, op=torch.distributed.ReduceOp.MAX, group=dp_group)
+        state = counts.tolist()
+    count, neg_min_samples, invalid = state
+    if invalid:
+        raise ValueError(f"An SFT sample is empty or exceeds the {limit}-token microbatch limit")
+    if count > -neg_min_samples:
+        raise ValueError("Cannot align nonempty microbatch counts across the SFT DP ranks")
+    indices = split_to_microbatch_count(partitions, lengths, count)
+    return [tu.index_select_tensor_dict(data, group) for group in indices], indices
+
+
 def prepare_micro_batches(
     data: TensorDict,
     dp_group=None,
@@ -69,6 +90,19 @@ def prepare_micro_batches(
     sp_size = tu.get_non_tensor_data(data=data, key="sp_size", default=1)
 
     force_group_size = tu.get_non_tensor_data(data=data, key="force_group_size", default=1)
+
+    if tu.get_non_tensor_data(data=data, key="sft_balance_strict_cap", default=False):
+        if not (
+            use_dynamic_bsz
+            and sp_size == 1
+            and force_group_size == 1
+            and same_micro_num_in_dp
+            and num_batches_divided_by is None
+            and min_num_micro_batch is None
+            and data["input_ids"].is_nested
+        ):
+            raise ValueError("The SFT batch-balance experiment requires unpadded dynamic DP microbatches")
+        return _prepare_capped_sft_micro_batches(data, data["max_token_len_per_gpu"], dp_group)
 
     if use_dynamic_bsz:
         assert "max_token_len_per_gpu" in data.keys(), "max_token_len_per_gpu must be set when use_dynamic_bsz is True"

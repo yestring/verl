@@ -13,8 +13,12 @@
 # limitations under the License.
 
 
+import hashlib
+import json
 import os
+import time
 from functools import partial
+from pathlib import Path
 
 from tensordict.tensorclass import NonTensorData
 
@@ -39,6 +43,7 @@ from verl.utils.dataset.multiturn_sft_dataset import MultiTurnSFTDataset
 from verl.utils.device import auto_set_device, get_device_name
 from verl.utils.logger import log_with_rank
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions
+from verl.utils.sft_batch_balance import load_cost_model
 from verl.utils.tracking import Tracking
 from verl.workers.engine_workers import TrainingWorker
 
@@ -96,6 +101,60 @@ class SFTTrainer:
         # check profile interval
         self.profiler_interval = self.config.trainer.profile_interval
         self._validate_profiler_interval()
+        self._build_batch_balance_experiment()
+
+    def _build_batch_balance_experiment(self):
+        trainer = self.config.trainer
+        metrics_path = trainer.get("sft_batch_balance_metrics_path")
+        cost_path = trainer.get("sft_batch_balance_cost_model")
+        self.sft_balance_profile = trainer.get("sft_batch_balance_profile", False)
+        self.sft_balance_metrics = None
+        self.sft_balance_cost = None
+        if not metrics_path:
+            if self.sft_balance_profile or cost_path:
+                raise ValueError("Set trainer.sft_batch_balance_metrics_path for the batch-balance experiment")
+            return
+
+        data = self.config.data
+        if not (
+            self.config.engine.strategy == "fsdp2"
+            and self.config.engine.ulysses_sequence_parallel_size == 1
+            and self.config.model.use_remove_padding
+            and data.use_dynamic_bsz
+            and data.pad_mode == "no_padding"
+            and trainer.device == "cuda"
+            and trainer.balance_batch
+        ):
+            raise ValueError("Use CUDA FSDP2 with SP=1, no padding, dynamic batching, and trainer.balance_batch=true")
+        if data.max_token_len_per_gpu < 1:
+            raise ValueError("data.max_token_len_per_gpu must be positive")
+        if self.sft_balance_profile and cost_path:
+            raise ValueError("Collect the calibration profile with the baseline cost model")
+        if cost_path:
+            self.sft_balance_cost = load_cost_model(cost_path)
+
+        self.sft_balance_metrics = Path(metrics_path).resolve()
+        self.sft_balance_metrics.parent.mkdir(parents=True, exist_ok=True)
+        self.sft_balance_metrics.touch(exist_ok=False)
+
+    def _batch_balance_record(self, data, lengths, step):
+        limit = self.config.data.max_token_len_per_gpu
+        if not lengths or min(lengths) < 1 or max(lengths) > limit:
+            raise ValueError(f"Step {step} contains an empty sample or one exceeding {limit} input tokens")
+
+        # Hash the step's inputs before changing their order. No training tokens are logged.
+        digest = hashlib.sha256()
+        for key in ("input_ids", "position_ids", "loss_mask"):
+            tensor = data[key]
+            if tensor.is_nested:
+                digest.update(tensor.offsets().cpu().numpy().tobytes())
+                tensor = tensor.values()
+            digest.update(tensor.detach().cpu().contiguous().numpy().tobytes())
+        loss_mask = data["loss_mask"]
+        loss_tokens = int((loss_mask.values() if loss_mask.is_nested else loss_mask).sum().item())
+        if loss_tokens < 1:
+            raise ValueError(f"Step {step} contains no supervised tokens")
+        return {"step": step, "input_tokens": sum(lengths), "loss_tokens": loss_tokens, "batch_sha256": digest.hexdigest()}
 
     def _validate_profiler_interval(self):
         assert len(self.profiler_interval) == 2
@@ -308,14 +367,36 @@ class SFTTrainer:
 
                 tu.assign_non_tensor(data, update_lr_scheduler=True, global_token_num=batch_seqlens_ntd)
 
+                balance_record = None
+                if self.sft_balance_metrics is not None:
+                    balance_record = self._batch_balance_record(data, batch_seqlens, global_step)
+                    tu.assign_non_tensor(
+                        data,
+                        sft_balance_strict_cap=True,
+                        sft_balance_log_metrics=True,
+                        sft_balance_profile=self.sft_balance_profile,
+                    )
+                    step_started = time.perf_counter()
+
                 if self.config.trainer.balance_batch:
-                    global_seqlen_lst = torch.Tensor([item.size()[0] for item in data["input_ids"]])
-                    global_seqlen_lst = calculate_workload(global_seqlen_lst)
+                    if self.sft_balance_cost is not None:
+                        global_seqlen_lst = self.sft_balance_cost.sample_weights(batch_seqlens)
+                    elif balance_record is not None:
+                        global_seqlen_lst = calculate_workload(torch.tensor(batch_seqlens, dtype=torch.int64)).tolist()
+                    else:
+                        global_seqlen_lst = torch.Tensor([item.size()[0] for item in data["input_ids"]])
+                        global_seqlen_lst = calculate_workload(global_seqlen_lst)
                     dp_size = max(self.training_client._query_dispatch_info("train")) + 1
+                    if balance_record is not None and len(batch_seqlens) % dp_size:
+                        raise ValueError("The experiment requires an equal sample count on each DP rank")
 
                     global_partition_lst = get_seqlen_balanced_partitions(
                         global_seqlen_lst, k_partitions=dp_size, equal_size=True
                     )
+                    if balance_record is not None:
+                        balance_record["rank_input_tokens"] = [
+                            sum(batch_seqlens[i] for i in partition) for partition in global_partition_lst
+                        ]
                     # Place smaller micro-batches at both ends to reduce the bubbles in pipeline parallel.
                     for idx, partition in enumerate(global_partition_lst):
                         partition.sort(key=lambda x: (global_seqlen_lst[x], x))
@@ -326,6 +407,9 @@ class SFTTrainer:
 
                     data = tu.index_select_tensor_dict(data, global_idx)
 
+                if balance_record is not None:
+                    balance_record["balance_ms"] = 1000 * (time.perf_counter() - step_started)
+
                 # start profile in SPMD mode
                 if global_step == self.start_profile_step:
                     self.training_client.start_profile()
@@ -333,11 +417,24 @@ class SFTTrainer:
                 # train for on batch
                 output = self.training_client.train_batch(data)
                 output = output.get()
+                if balance_record is not None:
+                    balance_record["step_s"] = time.perf_counter() - step_started
 
                 if global_step == self.end_profile_step:
                     self.training_client.stop_profile()
 
                 metrics = tu.get(output, "metrics")
+                if balance_record is not None:
+                    balance_record.update(
+                        loss=float(metrics["loss"]),
+                        grad_norm=float(metrics["grad_norm"]),
+                        rank_wall_ms=metrics.pop("sft_balance_rank_wall_ms"),
+                        peak_bytes=metrics.pop("sft_balance_step_peak_bytes"),
+                    )
+                    if self.sft_balance_profile:
+                        balance_record["microbatches"] = metrics.pop("sft_balance_microbatches")
+                    with self.sft_balance_metrics.open("a", encoding="utf-8") as stream:
+                        stream.write(json.dumps(balance_record, allow_nan=False) + "\n")
 
                 # TODO: we can actual accumulate metrics for N steps and perform aggregate metrics
                 metrics["train/loss"] = metrics.pop("loss")
