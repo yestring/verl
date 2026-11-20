@@ -108,10 +108,12 @@ class SFTTrainer:
         metrics_path = trainer.get("sft_batch_balance_metrics_path")
         cost_path = trainer.get("sft_batch_balance_cost_model")
         self.sft_balance_profile = trainer.get("sft_batch_balance_profile", False)
+        self.sft_defer_grad_sync = trainer.get("sft_defer_grad_sync", False)
+        self.sft_reuse_unsharded_params = trainer.get("sft_reuse_unsharded_params", False)
         self.sft_balance_metrics = None
         self.sft_balance_cost = None
         if not metrics_path:
-            if self.sft_balance_profile or cost_path:
+            if self.sft_balance_profile or cost_path or self.sft_defer_grad_sync or self.sft_reuse_unsharded_params:
                 raise ValueError("Set trainer.sft_batch_balance_metrics_path for the batch-balance experiment")
             return
 
@@ -180,13 +182,11 @@ class SFTTrainer:
         )
 
         wg_kwargs = {}
-        if self.start_profile_step != -1:
+        if self.start_profile_step != -1 and OmegaConf.select(self.config.profiler, "tool") == "nsys":
             wg_kwargs["profile_steps"] = list(range(self.start_profile_step, self.end_profile_step + 1))
-            # Only require nsight worker options when tool is nsys
-            if OmegaConf.select(self.config.profiler, "tool") == "nsys":
-                wg_kwargs["worker_nsight_options"] = OmegaConf.to_container(
-                    OmegaConf.select(self.config.global_profiler.global_tool_config.nsys, "worker_nsight_options")
-                )
+            wg_kwargs["worker_nsight_options"] = OmegaConf.to_container(
+                OmegaConf.select(self.config.global_profiler.global_tool_config.nsys, "worker_nsight_options")
+            )
 
         # create resource pool and worker group
         from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
@@ -376,6 +376,8 @@ class SFTTrainer:
                         sft_balance_strict_cap=True,
                         sft_balance_log_metrics=True,
                         sft_balance_profile=self.sft_balance_profile,
+                        sft_balance_defer_grad_sync=self.sft_defer_grad_sync,
+                        sft_balance_reuse_unsharded_params=self.sft_reuse_unsharded_params,
                     )
                     step_started = time.perf_counter()
 
@@ -403,6 +405,8 @@ class SFTTrainer:
                         partition.sort(key=lambda x: (global_seqlen_lst[x], x))
                         ordered_partition = partition[::2] + partition[1::2][::-1]
                         global_partition_lst[idx] = ordered_partition
+                    if balance_record is not None:
+                        balance_record["rank_sample_indices"] = global_partition_lst
 
                     global_idx = torch.tensor([j for partition in global_partition_lst for j in partition])
 
@@ -431,6 +435,9 @@ class SFTTrainer:
                         grad_norm=float(metrics["grad_norm"]),
                         rank_wall_ms=metrics.pop("sft_balance_rank_wall_ms"),
                         peak_bytes=metrics.pop("sft_balance_step_peak_bytes"),
+                        microbatch_count=metrics.pop("sft_comm_microbatch_count"),
+                        grad_sync_rounds=metrics.pop("sft_comm_grad_sync_rounds"),
+                        reshard_rounds=metrics.pop("sft_comm_reshard_rounds"),
                     )
                     if self.sft_balance_profile:
                         balance_record["microbatches"] = metrics.pop("sft_balance_microbatches")

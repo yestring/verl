@@ -22,3 +22,26 @@ bash examples/sft/batch_balance/run_4gpu.sh /workspace/models/Qwen3-1.7B-Base
 默认数据是固定长度分布的合成 token 样本，用于系统性能测量。设置 `MIXED_DATA` 和 `NARROW_DATA` 可使用各自的 SFT parquet，数据须有足够样本且经过模板后的序列长度在 token 上限内。四个训练对照都从同一个 HF 模型开始，checkpoint 路径分开。
 
 目录中保留各组 `steps.jsonl` 和 `run.log`、`cost_model.json` 以及 `report.md`。汇总要求同一负载的两组逐步输入哈希、输入 token 数和监督 token 数完全一致，并检查 loss 和梯度范数。报告包括有效监督 token/s、step P50/P95/DP rank 时差与各卡峰值显存。开始扩展到更长序列时，分别核对显存、拟合误差和端到端吞吐。
+
+## 四卡 FSDP2 通信对照
+
+```bash
+bash examples/sft/batch_balance/run_comm_4gpu.sh \
+  /workspace/models/Qwen3-0.6B /workspace/verl-sft-comm
+
+bash examples/sft/batch_balance/run_comm_trace.sh \
+  /workspace/verl-sft-comm /workspace/verl-sft-comm-trace
+```
+
+混合长度先做 2×2，对照梯度同步频率和 backward 后的参数重分片。窄长度对照 baseline 与 combined，检查只有一轮 microbatch 时的行为。全部实验保留原版 workload 估算、相同样本和 token 上限。报告逐步核对样本哈希、每个 rank 的样本索引和 microbatch 数。
+
+| 策略 | 梯度同步 | Backward 后重分片 |
+| --- | --- | --- |
+| baseline | 每个 microbatch | 每个 microbatch |
+| defer-grad | 最后一轮 | 每个 microbatch |
+| retain-params | 每个 microbatch | 最后一轮 |
+| combined | 最后一轮 | 最后一轮 |
+
+延迟梯度同步减少的是梯度 reduce-scatter 轮次。延后 backward 后重分片可复用已聚合的参数，减少下一轮 forward 的 all-gather。forward 后重分片沿用 baseline。两项都可能增加峰值显存，最后一次 backward 恢复常规设置，再执行 optimizer step。`report.md` 汇总逻辑轮次、吞吐、峰值显存、首步 loss 和 grad norm，并给出单项与组合耗时差。设置 `REPEAT_REVERSED=1` 可反向复跑混合组，检查运行顺序的影响。
+
+`run_comm_trace.sh` 另行回放四个混合组，只采 rank 0 的同一个多轮 microbatch step。它核对该 step 的样本指纹和分配等字段。`collectives.md` 分列 CPU 侧 collective 调用事件和 GPU 侧 NCCL kernel 统计。GPU kernel 的时间之和包含可能的重叠，暴露在计算之外的通信耗时需要在时间线上进一步判读。带 profiler 的运行独立于吞吐表。

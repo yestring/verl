@@ -79,6 +79,12 @@ trainer:
   # Cost parameters from examples/sft/batch_balance/fit_cost.py.
   sft_batch_balance_cost_model: null
 
+  # In the CUDA FSDP2 experiment, reduce gradients after the final microbatch.
+  sft_defer_grad_sync: false
+
+  # Retain unsharded parameters between microbatches in the same optimizer step.
+  sft_reuse_unsharded_params: false
+
   # Resume mode: "auto", "disable", or "resume_path"
   # "auto": resume from last checkpoint if available
   # "disable": start from scratch

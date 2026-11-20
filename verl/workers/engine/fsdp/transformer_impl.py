@@ -692,6 +692,21 @@ class FSDPEngine(BaseEngine):
             data=data, dp_group=self.get_data_parallel_group(), same_micro_num_in_dp=True
         )
 
+        microbatch_count = len(micro_batches)
+        defer_grad_sync = False
+        reuse_unsharded_params = False
+        policy_setters = []
+        if not forward_only and microbatch_count > 1:
+            defer_grad_sync = tu.get_non_tensor_data(data, "sft_balance_defer_grad_sync", False)
+            reuse_unsharded_params = tu.get_non_tensor_data(data, "sft_balance_reuse_unsharded_params", False)
+            if defer_grad_sync or reuse_unsharded_params:
+                if FSDPModule is None or not isinstance(self.module, FSDPModule):
+                    raise ValueError("SFT communication policies require a fully sharded FSDP2 module")
+                if defer_grad_sync:
+                    policy_setters.append(self.module.set_requires_gradient_sync)
+                if reuse_unsharded_params:
+                    policy_setters.append(self.module.set_reshard_after_backward)
+
         profile_balance = not forward_only and tu.get_non_tensor_data(data, "sft_balance_profile", False)
         if profile_balance:
             if not indices or not data["input_ids"].is_nested:
@@ -708,26 +723,53 @@ class FSDPEngine(BaseEngine):
         # and _build_fsdp_module, so self.scaler may not be set.
         scaler = getattr(self, "scaler", None)
 
-        for i, micro_batch in enumerate(micro_batches):
-            if profile_balance:
-                events[i][0].record()
-            with ctx:
-                loss, meta_info = self.forward_step(micro_batch, loss_function=loss_function, forward_only=forward_only)
+        try:
+            for i, micro_batch in enumerate(micro_batches):
+                if policy_setters and i in (0, microbatch_count - 1):
+                    # Restore sync/reshard before the last backward and optimizer step.
+                    for set_policy in policy_setters:
+                        set_policy(i == microbatch_count - 1)
+                if profile_balance:
+                    events[i][0].record()
+                with ctx:
+                    loss, meta_info = self.forward_step(
+                        micro_batch, loss_function=loss_function, forward_only=forward_only
+                    )
 
-                if not forward_only:
-                    if scaler is not None:
-                        scaler.scale(loss).backward()
-                    else:
-                        loss.backward()
-                    # Training discards model_output (train_batch pops it); keeping it accumulates
-                    # full-length nested tensors across the mini-batch (∝ ppo_mini_batch * rollout_n) → OOM.
-                    meta_info.pop("model_output", None)
+                    if not forward_only:
+                        if scaler is not None:
+                            scaler.scale(loss).backward()
+                        else:
+                            loss.backward()
+                        # Training discards model_output (train_batch pops it); keeping it accumulates
+                        # full-length nested tensors across the mini-batch (∝ ppo_mini_batch * rollout_n) → OOM.
+                        meta_info.pop("model_output", None)
 
-            if profile_balance:
-                events[i][1].record()
-            output_lst.append(meta_info)
+                if profile_balance:
+                    events[i][1].record()
+                output_lst.append(meta_info)
+        except BaseException:
+            # Cleanup is best effort so it cannot hide the original training failure.
+            for set_policy in policy_setters:
+                try:
+                    set_policy(True)
+                except Exception:
+                    logger.exception("Failed to restore the FSDP2 communication policy")
+            if reuse_unsharded_params:
+                for module in self.module.modules():
+                    if isinstance(module, FSDPModule):
+                        try:
+                            module.reshard()
+                        except Exception:
+                            logger.exception("Failed to reshard FSDP2 parameters after an aborted microbatch")
+            raise
 
         output = postprocess_batch_func(output_lst=output_lst, indices=indices, data=data)
+        if not forward_only and tu.get_non_tensor_data(data, "sft_balance_log_metrics", False):
+            # Logical microbatch rounds. Each FSDP round can issue many per-layer collectives.
+            output["metrics"]["sft_comm_microbatch_count"] = microbatch_count
+            output["metrics"]["sft_comm_grad_sync_rounds"] = 1 if defer_grad_sync else microbatch_count
+            output["metrics"]["sft_comm_reshard_rounds"] = 1 if reuse_unsharded_params else microbatch_count
         if profile_balance:
             events[-1][1].synchronize()
             samples = []
