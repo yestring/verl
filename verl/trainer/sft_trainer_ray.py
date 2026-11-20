@@ -247,13 +247,14 @@ class SFTTrainer:
         self.global_batch_size = config.data.train_batch_size
         self.train_batch_size_per_dp = self.global_batch_size // dp_size
         self.collate_fn = SFTTensorCollator(config.data.pad_mode)
+        num_workers = config.data.get("num_workers", 8)
 
         self.train_dataloader = StatefulDataLoader(
             dataset=self.train_dataset,
             batch_size=self.train_batch_size_per_dp,
             sampler=self.train_sampler,
             collate_fn=self.collate_fn,
-            num_workers=8,
+            num_workers=num_workers,
             pin_memory=False,
             drop_last=True,
             pin_memory_device=device_name,
@@ -268,7 +269,7 @@ class SFTTrainer:
                 batch_size=self.train_batch_size_per_dp,
                 sampler=self.val_sampler,
                 collate_fn=self.collate_fn,
-                num_workers=8,
+                num_workers=num_workers,
                 pin_memory=False,
                 drop_last=True,
                 pin_memory_device=device_name,

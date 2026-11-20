@@ -26,6 +26,7 @@ warmup=${WARMUP_STEPS:-3}
 global_batch=${GLOBAL_BATCH:-16}
 context=${CONTEXT_LEN:-16384}
 cap=${TOKEN_CAP:-16384}
+dataloader_workers=${DATALOADER_WORKERS:-0}
 
 for value in "$steps" "$profile_steps" "$global_batch" "$context" "$cap"; do
     if [[ ! $value =~ ^[1-9][0-9]*$ ]]; then
@@ -35,6 +36,10 @@ for value in "$steps" "$profile_steps" "$global_batch" "$context" "$cap"; do
 done
 if [[ ! $warmup =~ ^(0|[1-9][0-9]*)$ ]] || (( steps <= warmup || profile_steps - warmup < 3 )); then
     printf 'Need a nonnegative warmup, at least three profiled steps and one comparison step after warmup\n' >&2
+    exit 2
+fi
+if [[ ! $dataloader_workers =~ ^(0|[1-9][0-9]*)$ ]]; then
+    printf 'DATALOADER_WORKERS must be a nonnegative integer\n' >&2
     exit 2
 fi
 if (( global_batch % 4 != 0 || context < 2 || cap < context )); then
@@ -59,8 +64,8 @@ export PYTHONPATH="$script_dir:$repo${PYTHONPATH:+:$PYTHONPATH}"
 cd -- "$repo"
 
 printf 'Results directory %s\n' "$out"
-printf 'Model %s\nCUDA_VISIBLE_DEVICES %s\nGlobal batch %s\nContext length %s\nToken cap %s\n' \
-    "$model" "$CUDA_VISIBLE_DEVICES" "$global_batch" "$context" "$cap" > "$out/config.txt"
+printf 'Model %s\nCUDA_VISIBLE_DEVICES %s\nGlobal batch %s\nContext length %s\nToken cap %s\nDataLoader workers %s\n' \
+    "$model" "$CUDA_VISIBLE_DEVICES" "$global_batch" "$context" "$cap" "$dataloader_workers" > "$out/config.txt"
 
 run_arm() {
     local name=$1 workload=$2 train_steps=$3 profile=$4 cost=$5 parquet=$6
@@ -85,7 +90,7 @@ run_arm() {
         "model.path=\"$model\"" model.use_remove_padding=true \
         data.use_dynamic_bsz=true data.pad_mode=no_padding \
         "data.train_batch_size=$global_batch" "data.max_length=$context" \
-        "data.max_token_len_per_gpu=$cap" data.val_files=null \
+        "data.max_token_len_per_gpu=$cap" "data.num_workers=$dataloader_workers" data.val_files=null \
         trainer.n_gpus_per_node=4 trainer.nnodes=1 trainer.seed=42 \
         trainer.total_epochs=1 "trainer.total_training_steps=$train_steps" \
         trainer.balance_batch=true trainer.resume_mode=disable trainer.save_freq=-1 \

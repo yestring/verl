@@ -17,6 +17,8 @@ bash examples/sft/batch_balance/run_4gpu.sh /workspace/models/Qwen3-1.7B-Base
 
 脚本依次完成混合长度校准、拟合、混合长度 A/B、窄长度 A/B。默认全局 batch 为 16，单 microbatch token 上限和最大样本长度均为 16,384。启动参数可用 `PYTHON`、`STEPS`、`PROFILE_STEPS`、`WARMUP_STEPS`、`GLOBAL_BATCH`、`CONTEXT_LEN`、`TOKEN_CAP` 覆盖。`GLOBAL_BATCH` 需能被 4 整除。
 
+默认 `DATALOADER_WORKERS=0`，在训练控制进程中同步加载，适用于 `/dev/shm` 较小的容器。所有实验组沿用同一设置。逐步计时从取出 batch 后开始。容器有足够共享内存时，可用 `DATALOADER_WORKERS` 选择并行加载数。
+
 默认数据是固定长度分布的合成 token 样本，用于系统性能测量。设置 `MIXED_DATA` 和 `NARROW_DATA` 可使用各自的 SFT parquet，数据须有足够样本且经过模板后的序列长度在 token 上限内。四个训练对照都从同一个 HF 模型开始，checkpoint 路径分开。
 
 目录中保留各组 `steps.jsonl` 和 `run.log`、`cost_model.json` 以及 `report.md`。汇总要求同一负载的两组逐步输入哈希、输入 token 数和监督 token 数完全一致，并检查 loss 和梯度范数。报告包括有效监督 token/s、step P50/P95/DP rank 时差与各卡峰值显存。开始扩展到更长序列时，分别核对显存、拟合误差和端到端吞吐。
