@@ -58,3 +58,27 @@ bash examples/sft/batch_balance/run_comm_trace.sh --diagnostics \
 - `memory.md` 对齐各策略的 rank、microbatch 和采样边界，记录 CUDA allocator 的当前 allocated、reserved 与步内累计 allocated 峰值。关注第一轮 backward 后是否仍有额外活跃分配，以及最后一轮 backward 后的变化。
 - `overlap.md` 按 rank 对 CUDA kernel 时间区间取并集，计算 NCCL 与非 NCCL kernel 同时可见的时间，以及只有 NCCL kernel 可见的时间。它描述 GPU 时间线，不能借此推算训练关键路径或替代无 profiler 的步耗时。
 - `collectives.md` 保留各 rank 的 collective 计数和 NCCL kernel 时长之和。比较无 profiler 的吞吐或端到端峰值时，使用原实验目录的 `report.md`。
+
+## 跨 rank 的 microbatch 重装箱
+
+同一个 update 先使用原版算法分配样本到各 DP rank，再比较三种卡内装箱。三组沿用同一 token 硬上限、同样的 microbatch 数和 `combined` FSDP2 通信策略。
+
+| 策略 | 卡内装箱 |
+| --- | --- |
+| `ffd` | 复用现有 first-fit decreasing 和 DP 组数对齐规则 |
+| `sorted` | 沿用相同的 FFD 箱，按估计代价降序执行 |
+| `repack` | 重做卡内分组，优先降低每轮最重 rank 的代价之和，同分时比较轮内 rank 代价差 |
+
+样本代理代价为 `24576 × L + L²`。每卡最多八个样本时，枚举满足 token 上限和组数的候选。在所有卡的候选组合上做有界坐标搜索。更大的 rank batch 沿用排序策略。代价目标近似衡量轮次对齐后的负载，收益以四卡实测监督 token 吞吐和步耗时为准。CPU 规划和分发开销包含在训练步计时内。
+
+```bash
+python examples/sft/batch_balance/run_microbatch_study.py \
+  /workspace/models/Qwen3-0.6B /workspace/verl-sft-comm-repack --hours 10
+
+python examples/sft/batch_balance/run_microbatch_study.py \
+  --report-only /workspace/verl-sft-comm-repack
+```
+
+试跑校准步数，在 16K 混合长度主实验中平衡三组的执行顺序，随后复测 24K 混合长度和 16K 窄长度。报告逐步核对样本指纹、token 数、rank 样本计划、microbatch 数和各箱上限，另记录 loss、grad norm、P95、峰值 allocated 显存、规划耗时和两个代理目标。`plan.json` 保存冻结的计划，`progress.jsonl` 记录已执行的任务。复跑时使用相同 Git 版本、模型、输出目录和参数，在原有墙钟期限内继续实验。实际完成的对照以报告为准。`verl-sft-comm-` 前缀可被实验归档工具识别。
+
+正式计时关闭 profiler。独立的四 rank trace 可以比较 NCCL-only、重叠时长和有足够证据配对时的各 rank GPU kernel 启动时差。这个时差是 GPU 时间线观测，逐次通信等待和关键路径归因还需要依赖关系证据。

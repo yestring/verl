@@ -43,7 +43,12 @@ from verl.utils.dataset.multiturn_sft_dataset import MultiTurnSFTDataset
 from verl.utils.device import auto_set_device, get_device_name
 from verl.utils.logger import log_with_rank
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions
-from verl.utils.sft_batch_balance import load_cost_model
+from verl.utils.sft_batch_balance import (
+    MICROBATCH_POLICIES,
+    load_cost_model,
+    microbatch_plan_proxy,
+    plan_rank_microbatches,
+)
 from verl.utils.tracking import Tracking
 from verl.workers.engine_workers import TrainingWorker
 
@@ -108,6 +113,9 @@ class SFTTrainer:
         metrics_path = trainer.get("sft_batch_balance_metrics_path")
         cost_path = trainer.get("sft_batch_balance_cost_model")
         self.sft_balance_profile = trainer.get("sft_batch_balance_profile", False)
+        self.sft_microbatch_policy = trainer.get("sft_microbatch_policy")
+        if self.sft_microbatch_policy is not None and self.sft_microbatch_policy not in MICROBATCH_POLICIES:
+            raise ValueError("trainer.sft_microbatch_policy must be null, ffd, sorted, or repack")
         self.sft_defer_grad_sync = trainer.get("sft_defer_grad_sync", False)
         self.sft_reuse_unsharded_params = trainer.get("sft_reuse_unsharded_params", False)
         self.sft_comm_probe = trainer.get("sft_comm_probe", False)
@@ -117,6 +125,7 @@ class SFTTrainer:
             if (
                 self.sft_balance_profile
                 or cost_path
+                or self.sft_microbatch_policy is not None
                 or self.sft_defer_grad_sync
                 or self.sft_reuse_unsharded_params
                 or self.sft_comm_probe
@@ -181,6 +190,35 @@ class SFTTrainer:
         if loss_tokens < 1:
             raise ValueError(f"Step {step} contains no supervised tokens")
         return {"step": step, "input_tokens": sum(lengths), "loss_tokens": loss_tokens, "batch_sha256": digest.hexdigest()}
+
+    def _set_sft_microbatch_plan(self, data, batch_seqlens, rank_partitions, balance_record):
+        started = time.perf_counter()
+        rank_lengths = [[batch_seqlens[index] for index in rank] for rank in rank_partitions]
+        limit = self.config.data.max_token_len_per_gpu
+        plan = plan_rank_microbatches(rank_lengths, limit, self.sft_microbatch_policy)
+        proxy_max, proxy_spread = microbatch_plan_proxy(rank_lengths, plan)
+
+        # One (bin, position) pair per reordered row. TensorDict DP chunking carries
+        # the pair with the sample, including the order of samples inside each bin.
+        placements = []
+        for lengths, bins in zip(rank_lengths, plan, strict=True):
+            rank_placements = [(-1, -1)] * len(lengths)
+            for slot, indices in enumerate(bins):
+                for position, index in enumerate(indices):
+                    rank_placements[index] = (slot, position)
+            placements.extend(rank_placements)
+        data["sft_microbatch_placement"] = torch.tensor(
+            placements, dtype=torch.long, device=data["input_ids"].device
+        )
+        tu.assign_non_tensor(data, sft_microbatch_plan_count=len(plan[0]))
+        balance_record.update(
+            microbatch_policy=self.sft_microbatch_policy,
+            microbatch_proxy_max=proxy_max,
+            microbatch_proxy_spread=proxy_spread,
+            microbatch_plan=plan,
+            rank_sample_lengths=rank_lengths,
+            microbatch_plan_ms=1e3 * (time.perf_counter() - started),
+        )
 
     def _validate_profiler_interval(self):
         assert len(self.profiler_interval) == 2
@@ -437,6 +475,8 @@ class SFTTrainer:
                     global_idx = torch.tensor([j for partition in global_partition_lst for j in partition])
 
                     data = tu.index_select_tensor_dict(data, global_idx)
+                    if self.sft_microbatch_policy is not None:
+                        self._set_sft_microbatch_plan(data, batch_seqlens, global_partition_lst, balance_record)
 
                 if balance_record is not None:
                     balance_record["balance_ms"] = 1000 * (time.perf_counter() - step_started)

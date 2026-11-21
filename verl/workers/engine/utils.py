@@ -56,22 +56,68 @@ def enable_full_determinism(seed: int):
     torch.backends.cudnn.enabled = False
 
 
+def _decode_sft_microbatch_plan(placements, lengths: list[int], limit: int, count) -> list[list[int]] | None:
+    if (
+        not isinstance(placements, torch.Tensor)
+        or placements.is_nested
+        or placements.dtype != torch.long
+        or placements.shape != (len(lengths), 2)
+        or type(count) is not int
+        or not 1 <= count <= len(lengths)
+    ):
+        return None
+
+    ordered = [[] for _ in range(count)]
+    for index, (slot, position) in enumerate(placements.tolist()):
+        if not 0 <= slot < count or not 0 <= position < len(lengths):
+            return None
+        ordered[slot].append((position, index))
+
+    partitions = []
+    for group in ordered:
+        if not group:
+            return None
+        group.sort()
+        if any(position != offset for offset, (position, _) in enumerate(group)):
+            return None
+        indices = [index for _, index in group]
+        if sum(lengths[index] for index in indices) > limit:
+            return None
+        partitions.append(indices)
+    return partitions
+
+
 def _prepare_capped_sft_micro_batches(data: TensorDict, limit: int, dp_group):
     """Pack a DP rank's SFT samples and synchronize a feasible microbatch count."""
     lengths = data["input_ids"].offsets().diff().tolist()
     valid = bool(lengths) and 0 < min(lengths) and max(lengths) <= limit
     partitions = partition_under_token_cap(lengths, limit) if valid else []
-    state = (len(partitions), -len(lengths), int(not valid))
+    planned_count = tu.get_non_tensor_data(data=data, key="sft_microbatch_plan_count", default=None)
+    placements = data.get("sft_microbatch_placement")
+    invalid = int(not valid)
+    planned_indices = None
+    if planned_count is not None or placements is not None:
+        planned_indices = _decode_sft_microbatch_plan(placements, lengths, limit, planned_count)
+        if placements is not None:
+            data.pop("sft_microbatch_placement")
+        if planned_indices is None:
+            invalid = 2
+
+    state = (len(partitions), -len(lengths), invalid)
     if dp_group is not None and torch.distributed.is_initialized():
         counts = torch.tensor(state, device=get_device_name())
         torch.distributed.all_reduce(counts, op=torch.distributed.ReduceOp.MAX, group=dp_group)
         state = counts.tolist()
     count, neg_min_samples, invalid = state
+    if invalid == 2:
+        raise ValueError("Invalid controller SFT microbatch placement on at least one DP rank")
     if invalid:
         raise ValueError(f"An SFT sample is empty or exceeds the {limit}-token microbatch limit")
     if count > -neg_min_samples:
         raise ValueError("Cannot align nonempty microbatch counts across the SFT DP ranks")
-    indices = split_to_microbatch_count(partitions, lengths, count)
+    if planned_indices is not None and len(planned_indices) != count:
+        raise ValueError(f"Controller SFT microbatch count {len(planned_indices)} differs from FFD count {count}")
+    indices = planned_indices if planned_indices is not None else split_to_microbatch_count(partitions, lengths, count)
     return [tu.index_select_tensor_dict(data, group) for group in indices], indices
 
 
