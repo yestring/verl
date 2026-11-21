@@ -45,3 +45,16 @@ bash examples/sft/batch_balance/run_comm_trace.sh \
 延迟梯度同步减少的是梯度 reduce-scatter 轮次。延后 backward 后重分片可复用已聚合的参数，减少下一轮 forward 的 all-gather。forward 后重分片沿用 baseline。两项都可能增加峰值显存，最后一次 backward 恢复常规设置，再执行 optimizer step。`report.md` 汇总逻辑轮次、吞吐、峰值显存、首步 loss 和 grad norm，并给出单项与组合耗时差。设置 `REPEAT_REVERSED=1` 可反向复跑混合组，检查运行顺序的影响。
 
 `run_comm_trace.sh` 另行回放四个混合组，只采 rank 0 的同一个多轮 microbatch step。它核对该 step 的样本指纹和分配等字段。`collectives.md` 分列 CPU 侧 collective 调用事件和 GPU 侧 NCCL kernel 统计。GPU kernel 的时间之和包含可能的重叠，暴露在计算之外的通信耗时需要在时间线上进一步判读。带 profiler 的运行独立于吞吐表。
+
+### 四卡显存和通信时间线
+
+对已完成的某一档 token 上限回放四个混合长度组。`--diagnostics` 复用原实验的模型、数据量和训练总步数，在预热后的多轮 step 中选最常见的 microbatch 数，取满足条件的第一步，并在四个 rank 同时采集这个 step。
+
+```bash
+bash examples/sft/batch_balance/run_comm_trace.sh --diagnostics \
+  /workspace/verl-sft-comm-scaling/cap-16384 /workspace/verl-sft-comm-diag
+```
+
+- `memory.md` 对齐各策略的 rank、microbatch 和采样边界，记录 CUDA allocator 的当前 allocated、reserved 与步内累计 allocated 峰值。关注第一轮 backward 后是否仍有额外活跃分配，以及最后一轮 backward 后的变化。
+- `overlap.md` 按 rank 对 CUDA kernel 时间区间取并集，计算 NCCL 与非 NCCL kernel 同时可见的时间，以及只有 NCCL kernel 可见的时间。它描述 GPU 时间线，不能借此推算训练关键路径或替代无 profiler 的步耗时。
+- `collectives.md` 保留各 rank 的 collective 计数和 NCCL kernel 时长之和。比较无 profiler 的吞吐或端到端峰值时，使用原实验目录的 `report.md`。

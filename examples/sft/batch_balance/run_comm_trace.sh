@@ -2,8 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
+diagnostics=0
+if [[ ${1:-} == --diagnostics ]]; then
+    diagnostics=1
+    shift
+fi
 if [[ $# -lt 1 || $# -gt 2 ]]; then
-    printf 'Usage: %s COMPLETED_BENCHMARK_DIRECTORY [NEW_TRACE_DIRECTORY]\n' "$0" >&2
+    printf 'Usage: %s [--diagnostics] COMPLETED_BENCHMARK_DIRECTORY [NEW_TRACE_DIRECTORY]\n' "$0" >&2
     exit 2
 fi
 
@@ -17,8 +22,9 @@ config_value() {
 }
 
 model=$(config_value Model)
+steps=$(config_value Steps)
 dataset_steps=$(config_value 'Dataset steps')
-dataset_steps=${dataset_steps:-$(config_value Steps)}
+dataset_steps=${dataset_steps:-$steps}
 warmup=$(config_value Warmup)
 export CUDA_VISIBLE_DEVICES=$(config_value CUDA_VISIBLE_DEVICES)
 export GLOBAL_BATCH=$(config_value 'Global batch')
@@ -31,20 +37,34 @@ if [[ $MIXED_DATA == synthetic ]]; then
 fi
 unset NARROW_DATA
 
-trace_step=$("$python_bin" - "$bench/mixed-baseline/steps.jsonl" "$warmup" <<'PY'
+trace_step=$("$python_bin" - "$bench/mixed-baseline/steps.jsonl" "$warmup" "$diagnostics" <<'PY'
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 with Path(sys.argv[1]).open() as stream:
-    for row in map(json.loads, stream):
-        if row["step"] > int(sys.argv[2]) and min(row["microbatch_count"]) > 1:
-            print(row["step"])
-            break
-    else:
-        raise SystemExit("No measured mixed step with multiple microbatches")
+    candidates = [
+        row
+        for row in map(json.loads, stream)
+        if row["step"] > int(sys.argv[2]) and min(row["microbatch_count"]) > 1
+    ]
+if not candidates:
+    raise SystemExit("No measured mixed step with multiple microbatches")
+if sys.argv[3] == "1":
+    most_common = Counter(row["microbatch_count"][0] for row in candidates).most_common(1)[0][0]
+    candidates = [row for row in candidates if row["microbatch_count"][0] == most_common]
+print(candidates[0]["step"])
 PY
 )
+
+replay_steps=$trace_step
+profile_options=('profiler.ranks=[0]')
+if (( diagnostics )); then
+    # Preserve the training horizon used by the reference LR schedule.
+    replay_steps=$steps
+    profile_options=('profiler.ranks=[0,1,2,3]' trainer.sft_comm_probe=true)
+fi
 
 if [[ $# -eq 2 ]]; then
     mkdir -- "$2"
@@ -52,15 +72,16 @@ if [[ $# -eq 2 ]]; then
 else
     out=$(mktemp -d "${TMPDIR:-/tmp}/verl-sft-comm-trace.XXXXXX")
 fi
-printf 'Trace directory %s\nProfiled step %s on rank 0\n' "$out" "$trace_step"
+printf 'Reference benchmark %s\nTrace directory %s\nProfiled step %s, %s\n' \
+    "$bench" "$out" "$trace_step" "${profile_options[0]}"
 
 traces=()
 for arm in mixed-baseline mixed-defer-grad mixed-retain-params mixed-combined; do
     run="$out/replay-$arm"
-    ARM_ONLY="$arm" STEPS="$trace_step" DATASET_STEPS="$dataset_steps" WARMUP_STEPS=0 \
+    ARM_ONLY="$arm" STEPS="$replay_steps" DATASET_STEPS="$dataset_steps" WARMUP_STEPS=0 \
         bash "$script_dir/run_comm_4gpu.sh" "$model" "$run" \
         "trainer.profile_interval=[$trace_step,$trace_step]" \
-        profiler.enable=true profiler.tool=torch 'profiler.ranks=[0]' \
+        profiler.enable=true profiler.tool=torch "${profile_options[@]}" \
         'profiler.tool_config.torch.contents=[cpu,cuda]' \
         "profiler.save_path=\"$run/trace\""
 
@@ -89,3 +110,9 @@ done
 
 "$python_bin" "$script_dir/summarize_comm_trace.py" "${traces[@]}" | tee "$out/collectives.md"
 printf '\nCollective report %s/collectives.md\n' "$out"
+if (( diagnostics )); then
+    summary_status=0
+    "$python_bin" "$script_dir/summarize_comm_overlap.py" "$out" | tee "$out/overlap.md" || summary_status=1
+    "$python_bin" "$script_dir/summarize_comm_memory.py" "$out" | tee "$out/memory.md" || summary_status=1
+    exit "$summary_status"
+fi

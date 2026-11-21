@@ -82,6 +82,19 @@ logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 device_name = get_device_name()
 
 
+def _record_sft_comm_memory(microbatch: int, phase: str, tokens: int) -> None:
+    # Read the host allocator counters without synchronizing CUDA. TrainingWorker
+    # already resets the peak once per instrumented training batch.
+    stats = torch.cuda.memory_stats()
+    allocated = stats["allocated_bytes.all.current"]
+    reserved = stats["reserved_bytes.all.current"]
+    peak = stats["allocated_bytes.all.peak"]
+    with torch.profiler.record_function(
+        f"sft_comm_probe.memory.{microbatch}.{phase}.{allocated}.{reserved}.{tokens}.{peak}"
+    ):
+        pass
+
+
 class FSDPEngine(BaseEngine):
     """
     Concrete Engine implementation using PyTorch FullyShardedDataParallel (FSDP).
@@ -708,6 +721,7 @@ class FSDPEngine(BaseEngine):
                     policy_setters.append(self.module.set_reshard_after_backward)
 
         profile_balance = not forward_only and tu.get_non_tensor_data(data, "sft_balance_profile", False)
+        comm_probe = not forward_only and tu.get_non_tensor_data(data, "sft_comm_probe", False)
         if profile_balance:
             if not indices or not data["input_ids"].is_nested:
                 raise ValueError("SFT balance profiling requires dynamic batches with no padding.")
@@ -718,6 +732,7 @@ class FSDPEngine(BaseEngine):
         output_lst = []
 
         ctx = torch.no_grad() if forward_only else nullcontext()
+        empty_range = nullcontext()
 
         # getattr fallback: some subclasses (e.g. VeOmniEngine) bypass FSDPEngine.__init__
         # and _build_fsdp_module, so self.scaler may not be set.
@@ -731,19 +746,32 @@ class FSDPEngine(BaseEngine):
                         set_policy(i == microbatch_count - 1)
                 if profile_balance:
                     events[i][0].record()
+                forward_range = backward_range = empty_range
+                if comm_probe:
+                    microbatch = i + 1
+                    tokens = micro_batch["input_ids"].values().numel()
+                    _record_sft_comm_memory(microbatch, "before_forward", tokens)
+                    forward_range = torch.profiler.record_function(f"sft_comm_probe.mb.{microbatch}.forward")
+                    backward_range = torch.profiler.record_function(f"sft_comm_probe.mb.{microbatch}.backward")
                 with ctx:
-                    loss, meta_info = self.forward_step(
-                        micro_batch, loss_function=loss_function, forward_only=forward_only
-                    )
+                    with forward_range:
+                        loss, meta_info = self.forward_step(
+                            micro_batch, loss_function=loss_function, forward_only=forward_only
+                        )
+                    if comm_probe:
+                        _record_sft_comm_memory(microbatch, "after_forward", tokens)
 
                     if not forward_only:
-                        if scaler is not None:
-                            scaler.scale(loss).backward()
-                        else:
-                            loss.backward()
+                        with backward_range:
+                            if scaler is not None:
+                                scaler.scale(loss).backward()
+                            else:
+                                loss.backward()
                         # Training discards model_output (train_batch pops it); keeping it accumulates
                         # full-length nested tensors across the mini-batch (∝ ppo_mini_batch * rollout_n) → OOM.
                         meta_info.pop("model_output", None)
+                        if comm_probe:
+                            _record_sft_comm_memory(microbatch, "after_backward", tokens)
 
                 if profile_balance:
                     events[i][1].record()

@@ -85,6 +85,9 @@ trainer:
   # Retain unsharded parameters between microbatches in the same optimizer step.
   sft_reuse_unsharded_params: false
 
+  # Add microbatch phases and CUDA allocator markers to a single Torch Profiler step.
+  sft_comm_probe: false
+
   # Resume mode: "auto", "disable", or "resume_path"
   # "auto": resume from last checkpoint if available
   # "disable": start from scratch

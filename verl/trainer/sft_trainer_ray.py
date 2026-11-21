@@ -110,10 +110,17 @@ class SFTTrainer:
         self.sft_balance_profile = trainer.get("sft_batch_balance_profile", False)
         self.sft_defer_grad_sync = trainer.get("sft_defer_grad_sync", False)
         self.sft_reuse_unsharded_params = trainer.get("sft_reuse_unsharded_params", False)
+        self.sft_comm_probe = trainer.get("sft_comm_probe", False)
         self.sft_balance_metrics = None
         self.sft_balance_cost = None
         if not metrics_path:
-            if self.sft_balance_profile or cost_path or self.sft_defer_grad_sync or self.sft_reuse_unsharded_params:
+            if (
+                self.sft_balance_profile
+                or cost_path
+                or self.sft_defer_grad_sync
+                or self.sft_reuse_unsharded_params
+                or self.sft_comm_probe
+            ):
                 raise ValueError("Set trainer.sft_batch_balance_metrics_path for the batch-balance experiment")
             return
 
@@ -132,6 +139,23 @@ class SFTTrainer:
             raise ValueError("data.max_token_len_per_gpu must be positive")
         if self.sft_balance_profile and cost_path:
             raise ValueError("Collect the calibration profile with the baseline cost model")
+        if self.sft_comm_probe:
+            torch_profile = self.config.profiler.tool_config.torch
+            if (
+                not self.profiler_config.enable
+                or self.profiler_config.tool != "torch"
+                or self.start_profile_step < 1
+                or self.start_profile_step != self.end_profile_step
+                or torch_profile.discrete
+                or (torch_profile.contents and "cpu" not in torch_profile.contents)
+                or not (self.profiler_config.all_ranks or self.profiler_config.ranks)
+            ):
+                raise ValueError(
+                    "Use a single-step continuous Torch Profiler with CPU events and selected ranks "
+                    "for the SFT communication probe"
+                )
+            if self.sft_balance_profile:
+                raise ValueError("Run SFT communication and batch-balance calibration profiling separately")
         if cost_path:
             self.sft_balance_cost = load_cost_model(cost_path)
 
@@ -379,6 +403,8 @@ class SFTTrainer:
                         sft_balance_defer_grad_sync=self.sft_defer_grad_sync,
                         sft_balance_reuse_unsharded_params=self.sft_reuse_unsharded_params,
                     )
+                    if self.sft_comm_probe and global_step == self.start_profile_step:
+                        tu.assign_non_tensor(data, sft_comm_probe=True)
                     step_started = time.perf_counter()
 
                 if self.config.trainer.balance_batch:
