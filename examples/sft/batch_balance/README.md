@@ -82,3 +82,17 @@ python examples/sft/batch_balance/run_microbatch_study.py \
 试跑校准步数，在 16K 混合长度主实验中平衡三组的执行顺序，随后复测 24K 混合长度和 16K 窄长度。报告逐步核对样本指纹、token 数、rank 样本计划、microbatch 数和各箱上限，另记录 loss、grad norm、P95、峰值 allocated 显存、规划耗时和两个代理目标。`plan.json` 保存冻结的计划，`progress.jsonl` 记录已执行的任务。复跑时使用相同 Git 版本、模型、输出目录和参数，在原有墙钟期限内继续实验。实际完成的对照以报告为准。`verl-sft-comm-` 前缀可被实验归档工具识别。
 
 正式计时关闭 profiler。独立的四 rank trace 可以比较 NCCL-only、重叠时长和有足够证据配对时的各 rank GPU kernel 启动时差。这个时差是 GPU 时间线观测，逐次通信等待和关键路径归因还需要依赖关系证据。
+
+## 重装箱与达到验证损失目标的时间
+
+这组实验沿用四卡 16K 混合长度设置。先以零学习率运行 FFD 两次及重装箱一次，检查同一批样本上的 loss 和裁剪前梯度范数。再以较低学习率和固定 warmup 短跑 FFD。从独立校准集确定一个验证 loss 目标，之后用另一批固定样本做正式评价。
+
+```bash
+python examples/sft/batch_balance/run_repack_quality_study.py \
+  /workspace/models/Qwen3-0.6B /workspace/verl-sft-comm-repack-quality --hours 10
+
+python examples/sft/batch_balance/run_repack_quality_study.py \
+  --report-only /workspace/verl-sft-comm-repack-quality
+```
+
+正式实验按正序、反序交替配对 FFD 与重装箱。每对使用同一初始模型和同一批样本，各组按相同步频率评估。比较同等训练步数的验证损失、首次观测达到目标的墙钟时间、监督 token/s、P95 步耗时和峰值显存。墙钟时间从 trainer 的 `fit` 入口开始，包含批次准备和周期验证，整臂启动时间单独记录。达到目标的时刻受验证间隔限制。校准集和验证集采用分离的合成样本，训练质量结论适用于该合成任务。

@@ -107,6 +107,14 @@ class SFTTrainer:
         self.profiler_interval = self.config.trainer.profile_interval
         self._validate_profiler_interval()
         self._build_batch_balance_experiment()
+        self.sft_validation_metrics = None
+        validation_path = self.config.trainer.get("sft_validation_metrics_path")
+        if validation_path:
+            if not self.config.data.val_files:
+                raise ValueError("Set data.val_files to record SFT validation metrics")
+            self.sft_validation_metrics = Path(validation_path).resolve()
+            self.sft_validation_metrics.parent.mkdir(parents=True, exist_ok=True)
+            self.sft_validation_metrics.touch(exist_ok=False)
 
     def _build_batch_balance_experiment(self):
         trainer = self.config.trainer
@@ -339,6 +347,9 @@ class SFTTrainer:
         else:
             self.val_dataloader = None
 
+        if self.sft_validation_metrics is not None and (self.val_dataloader is None or len(self.val_dataloader) == 0):
+            raise ValueError("SFT validation metrics require at least one complete validation batch")
+
         # update
         if self.config.trainer.total_training_steps is not None:
             self.total_training_steps = self.config.trainer.total_training_steps
@@ -367,6 +378,7 @@ class SFTTrainer:
         return batch_seqlens
 
     def fit(self):
+        fit_started = time.perf_counter() if self.sft_validation_metrics is not None else None
         tracking = Tracking(
             project_name=self.config.trainer.project_name,
             experiment_name=self.config.trainer.experiment_name,
@@ -540,6 +552,14 @@ class SFTTrainer:
                     metric = {"val/loss": val_loss.detach().item()}
                     tracking.log(data=metric, step=global_step)
                     last_valid_metric = metric
+                    if self.sft_validation_metrics is not None:
+                        record = {
+                            "step": global_step,
+                            "loss": metric["val/loss"],
+                            "wall_s": time.perf_counter() - fit_started,
+                        }
+                        with self.sft_validation_metrics.open("a", encoding="utf-8") as stream:
+                            stream.write(json.dumps(record, allow_nan=False) + "\n")
 
                 if is_last_step or (self.save_freq > 0 and is_save_step):
                     self.ckpt_handler.save_checkpoint(step=global_step)

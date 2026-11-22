@@ -73,6 +73,9 @@ trainer:
   # Enable the Ray FSDP2 batch-balance experiment and write one JSON record per step.
   sft_batch_balance_metrics_path: null
 
+  # Write validation loss and elapsed fit wall time to a new JSONL file.
+  sft_validation_metrics_path: null
+
   # Measure individual microbatches for calibration. Use a separate run for profiling.
   sft_batch_balance_profile: false
 
